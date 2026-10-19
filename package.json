@@ -1,0 +1,12 @@
+{
+  "name": "mahou-no-tou",
+  "version": "1.1.0",
+  "description": "魔力の塔 ― ブラウザで遊べる放置型クリッカー(静的サイト)",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/game.test.js tests/save.test.js tests/visual.test.js",
+    "test:e2e": "python3 tests/e2e.py",
+    "simulate": "node tools/simulate.js 240 4",
+    "serve": "python3 -m http.server 8000"
+  }
+}
