@@ -119,7 +119,8 @@
     var IMG = {};
     ['spirit', 'mage', 'golem', 'egg', 'crystal'].forEach(function (k) {
       var im = new Image();
-      im.src = 'assets/' + k + '.svg';
+      var path = 'assets/' + k + '.svg';
+      im.src = (window.MT_ASSETS && window.MT_ASSETS[path]) || path;
       IMG[k] = im;
     });
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }

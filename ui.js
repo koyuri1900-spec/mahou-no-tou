@@ -13,6 +13,9 @@
   var PERIODIC_SAVE = 10000;  // 定期保存: 10秒
 
   var $ = function (id) { return document.getElementById(id); };
+  // 画像のパス。1ファイル版(mahou-no-tou.html)では埋め込みデータに置き換わる
+  function asset(p) { return (window.MT_ASSETS && window.MT_ASSETS[p]) || p; }
+  var GEM = asset('assets/crystal.svg');
 
   // ---- 起動 -------------------------------------------------------------------
   var saver = MTSave.createSaver({});
@@ -54,7 +57,7 @@
   function applyStage(st, animate) {
     shownStage = st;
     for (var i = 1; i <= 4; i++) el.stage.classList.toggle('cs-' + i, i === st);
-    var src = 'assets/crystal_' + st + '.svg';
+    var src = asset('assets/crystal_' + st + '.svg');
     el.crystalImg.src = src;
     el.crystalFlow.style.setProperty('--cmask', 'url("' + src + '")');
     setText(el.stageNum, String(st));
@@ -81,14 +84,14 @@
   var unitRows = MT.UNITS.map(function (u, idx) {
     var li = h('li', 'card unit');
     li.innerHTML =
-      '<img class="card-icon pix" src="assets/' + u.id + '.svg" alt="">' +
+      '<img class="card-icon pix" src="' + asset('assets/' + u.id + '.svg') + '" alt="">' +
       '<div class="card-main">' +
       '  <div class="card-head"><span class="card-name">' + u.name + '</span><span class="owned">所有 <b class="js-owned">0</b></span></div>' +
       '  <div class="card-sub js-sub"></div>' +
       '  <div class="lock js-lock"><span class="lock-ico">🔒</span><span class="js-cond"></span>' +
       '    <div class="bar"><i class="js-bar"></i></div></div>' +
       '</div>' +
-      '<button type="button" class="buy js-buy" data-unit="' + u.id + '"><span class="buy-n js-n">×1</span><span class="buy-cost"><img src="assets/crystal.svg" alt="" class="gem">' +
+      '<button type="button" class="buy js-buy" data-unit="' + u.id + '"><span class="buy-n js-n">×1</span><span class="buy-cost"><img src="' + GEM + '" alt="" class="gem">' +
       '<span class="js-cost">0</span></span></button>';
     el.unitList.appendChild(li);
     return {
@@ -101,10 +104,10 @@
   var cumRows = MT.CUMULATIVE.map(function (c) {
     var li = h('li', 'card upg');
     li.innerHTML =
-      '<img class="card-icon pix small" src="assets/icon_' + c.icon + '.svg" alt="">' +
+      '<img class="card-icon pix small" src="' + asset('assets/icon_' + c.icon + '.svg') + '" alt="">' +
       '<div class="card-main"><div class="card-head"><span class="card-name">' + c.name + '</span><span class="lv">Lv.<b class="js-lv">0</b></span></div>' +
       '<div class="card-sub js-desc"></div></div>' +
-      '<button type="button" class="buy js-buy" data-upg="' + c.id + '"><span class="buy-n">強化</span><span class="buy-cost"><img src="assets/crystal.svg" alt="" class="gem"><span class="js-cost">0</span></span></button>';
+      '<button type="button" class="buy js-buy" data-upg="' + c.id + '"><span class="buy-n">強化</span><span class="buy-cost"><img src="' + GEM + '" alt="" class="gem"><span class="js-cost">0</span></span></button>';
     el.cumList.appendChild(li);
     return { def: c, li: li, lv: li.querySelector('.js-lv'), desc: li.querySelector('.js-desc'), buy: li.querySelector('.js-buy'), cost: li.querySelector('.js-cost') };
   });
@@ -113,11 +116,11 @@
   var specialRows = MT.SPECIALS.map(function (sp) {
     var li = h('li', 'card upg special');
     li.innerHTML =
-      '<img class="card-icon pix small" src="assets/' + ICONS[sp.icon] + '.svg" alt="">' +
+      '<img class="card-icon pix small" src="' + asset('assets/' + ICONS[sp.icon] + '.svg') + '" alt="">' +
       '<div class="card-main"><div class="card-head"><span class="card-name">' + sp.name + '</span><span class="tag js-tag"></span></div>' +
       '<div class="card-sub">' + sp.desc + '</div>' +
       '<div class="lock js-lock"><span class="lock-ico">🔒</span><span>' + MT.condText(sp.cond) + ' で解放</span><div class="bar"><i class="js-bar"></i></div></div></div>' +
-      '<button type="button" class="buy js-buy" data-sp="' + sp.id + '"><span class="buy-n">購入</span><span class="buy-cost"><img src="assets/crystal.svg" alt="" class="gem">' + fmt(sp.cost) + '</span></button>';
+      '<button type="button" class="buy js-buy" data-sp="' + sp.id + '"><span class="buy-n">購入</span><span class="buy-cost"><img src="' + GEM + '" alt="" class="gem">' + fmt(sp.cost) + '</span></button>';
     el.specialList.appendChild(li);
     return { def: sp, li: li, tag: li.querySelector('.js-tag'), lock: li.querySelector('.js-lock'), bar: li.querySelector('.js-bar'), buy: li.querySelector('.js-buy') };
   });
