@@ -64,6 +64,13 @@ const server = http.createServer((q, r) => {
   await shot("07-rules");
   const rb = await page.evaluate(() => ({ x: V.game.scene.rules.x, y: V.game.scene.rules.y }));
   await drag(rb.x + 20, rb.y + 4, 107, 257);
+  // 書類を解析機の上に落としても、解析機に重ならない位置へずれる
+  const idNow = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
+  await drag(idNow.x + 10, idNow.y + 30, 420, 110);
+  const overlap = await page.evaluate(() => { const s = V.game.scene, d = s.items.find(d => d.kind === "id"), a = V.L.analyzer, w = d.size().w, h = d.size().h; return d.x < a.x + a.w && d.x + w > a.x && d.y < a.y + a.h && d.y + h > a.y; });
+  console.log("ID overlaps analyzer:", overlap);
+  if (overlap) errors.push("ID が解析機に重なった");
+  await shot("07c-avoid");
   // 判定(右側面の収納)
   await click(474, 150);
   await page.waitForTimeout(400);

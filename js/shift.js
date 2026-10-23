@@ -500,6 +500,31 @@
       it.loc = "desk"; it.dirty = true;
       const { w, h } = it.size();
       it.x = V.clamp(it.x, L.desk.x + 1, 480 - w); it.y = V.clamp(it.y, L.desk.y + 1, 270 - h);
+      this.avoidDevices(it, w, h);
+    }
+    // 机に据え付けた装置(解析機・ルーペの収納・道具棚)の上には置けない。重なったら、いちばん近い空いた位置へずらす
+    blockedRects() {
+      const m = 2, grow = r => ({ x: r.x - m, y: r.y - m, w: r.w + m * 2, h: r.h + m * 2 });
+      const list = [L.analyzer, { x: L.kitBlood.x, y: L.kitBlood.y, w: L.kitBlood.w, h: (this.day >= 3 ? L.kitXray.y + L.kitXray.h : L.kitBlood.y + L.kitBlood.h) - L.kitBlood.y }];
+      if (this.loupe) list.push(L.loupeCase);
+      list.push(L.drawerTab, L.inspect);
+      return list.map(grow);
+    }
+    avoidDevices(it, w, h) {
+      const blocks = this.blockedRects();
+      const hits = (x, y) => blocks.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y);
+      if (!hits(it.x, it.y)) return;
+      const minX = L.desk.x + 1, maxX = 480 - w, minY = L.desk.y + 1, maxY = 270 - h;
+      let best = null;
+      blocks.forEach(b => [[b.x - w, it.y], [b.x + b.w, it.y], [it.x, b.y - h], [it.x, b.y + b.h]].forEach(([x, y]) => {
+        if (x < minX || x > maxX || y < minY || y > maxY || hits(x, y)) return;
+        const d = Math.hypot(x - it.x, y - it.y);
+        if (!best || d < best.d) best = { x, y, d };
+      }));
+      if (!best) { // 近くに空きがなければ、机の中央下に置く
+        for (let y = maxY; y >= minY && !best; y -= 6) for (let x = minX + 30; x <= maxX && !best; x += 6) if (!hits(x, y)) best = { x, y };
+      }
+      if (best) { it.x = Math.round(best.x); it.y = Math.round(best.y); }
     }
     putBack(it, dg) {
       if (dg.from === "tray") { it.loc = "tray"; return; }
