@@ -11,26 +11,27 @@
   // ---- 規則 ----
   // key は照合で使う欄の名前。day はその規則が始まる日。
   V.RULES = [
-    { key: "rule.expiry", day: 1, page: 0, text: "ゲノムIDは有効期限内であること。" },
-    { key: "rule.status", day: 1, page: 0, text: "判定が INVALID の乗客・乗員は搭乗できない。" },
-    { key: "rule.staff", day: 1, page: 0, text: "INVALID の地上職員は、本人の作業許可証があれば【限定】で通す。" },
-    { key: "rule.genome", day: 1, page: 0, text: "採血検体の16塩基が、IDのゲノム署名と一致すること。" },
-    { key: "rule.height", day: 1, page: 0, text: "実測身長が、IDの予測身長の範囲内であること。" },
-    { key: "rule.detain", day: 1, page: 0, text: "身体・検体の偽装を指摘できたら【拘束】。" },
-    { key: "rule.ticket", day: 2, page: 1, text: "乗客と乗員は、本人名義・本日付の搭乗券を持つこと。" },
-    { key: "rule.seal", day: 2, page: 1, text: "搭乗券の印章は現行の第12版(E-12)に限る。" },
-    { key: "rule.heart", day: 2, page: 1, text: "心拍に乱れがあれば不適格。医療記録で既往が示されていれば可。" },
-    { key: "rule.hair", day: 3, page: 2, text: "毛髪検体は、毛根が付いていること。" },
-    { key: "rule.mass", day: 3, page: 2, text: "計量台の体重は、搭乗券の申告質量の±0.5kg以内。" },
-    { key: "rule.xray", day: 3, page: 2, text: "X線で衣服の下に不審物があれば【拘束】。" }
+    { key: "rule.expiry", day: 1, text: "ゲノムIDは有効期限内であること。" },
+    { key: "rule.status", day: 1, text: "判定が INVALID の乗客・乗員は搭乗できない。" },
+    { key: "rule.staff", day: 1, text: "INVALID の地上職員は、本人の作業許可証があれば【限定】で通す。" },
+    { key: "rule.height", day: 1, text: "実測身長が、IDの予測身長の範囲内であること。" },
+    { key: "rule.sample", day: 1, text: "採血の対象:乗員と、IDの発行から30日以内の者。対象者は必ず採血する。" },
+    { key: "rule.genome", day: 1, text: "採血した検体の16塩基が、IDのゲノム署名と一致すること。" },
+    { key: "rule.detain", day: 1, text: "偽装を指摘されて暴れた者は、【警備を呼ぶ】で拘束する。" },
+    { key: "rule.ticket", day: 2, text: "乗客と乗員は、本人名義・本日付の搭乗券を持つこと。" },
+    { key: "rule.seal", day: 2, text: "搭乗券の印章は現行の第12版(E-12)に限る。" },
+    { key: "rule.heart", day: 2, text: "心拍に乱れがあれば不適格。医療記録で既往が示されていれば可。" },
+    { key: "rule.hair", day: 3, text: "採血の対象者は、毛髪台紙も提出すること。毛根のない毛髪は偽装。" },
+    { key: "rule.mass", day: 3, text: "体重が搭乗券の申告質量と0.5kgを超えて違えば、X線を撮らせる。" },
+    { key: "rule.xray", day: 3, text: "X線写真に不審物が写っていれば偽装。" }
   ];
-  V.RULE_PAGES = ["基本", "書類", "検体"];
+  V.SAMPLE_DAYS = 30;
 
   // その日に有効な検査の種類
   V.dayChecks = day => {
-    const c = ["expiry", "status", "genome", "height"];
+    const c = ["expiry", "status", "genome", "height", "sample"];
     if (day >= 2) c.push("ticket", "seal", "heart");
-    if (day >= 3) c.push("hair", "mass", "xray");
+    if (day >= 3) c.push("hair", "xray");
     return c;
   };
 
@@ -40,7 +41,7 @@
       head: "最終便まであと29日 ― 第7ゲート、増便体制に",
       body: "地上最後の出発ゲートとなった第7ゲートで、エリュシオン行きの増便が始まった。港湾局は「適格者の移住を最後の一人まで」と話す。",
       side: ["第11便、定刻に軌道へ", "地表の気温、5月の最高を更新"],
-      rules: ["ゲノムIDの有効期限", "VALID の判定", "地上職員の作業許可証", "採血の16塩基照合", "予測身長と実測身長"]
+      rules: ["ゲノムIDの有効期限", "VALID の判定", "地上職員の作業許可証", "予測身長と実測身長", "採血(乗員と、ID発行30日以内の者)と16塩基の照合"]
     },
     2: {
       head: "搭乗券の印章、第12版に切り替え",
@@ -50,9 +51,9 @@
     },
     3: {
       head: "検体の持ち込み相次ぐ ― 毛髪と血液に注意",
-      body: "他人の毛髪や血液を持ち込み、遺伝子照合をすり抜けようとする手口が増えている。当局は本日から毛根の確認と計量を義務づけた。",
+      body: "他人の毛髪や血液を持ち込み、遺伝子照合をすり抜けようとする手口が増えている。当局は本日から毛髪台紙の提出と計量、X線撮影を義務づけた。",
       side: ["最終便の乗員名簿、今夜公開", "帰還ゲートの再開は未定"],
-      rules: ["毛髪検体の毛根", "申告質量と体重(±0.5kg)", "X線の不審物"]
+      rules: ["採血の対象者は毛髪台紙も提出(毛根を確認)", "体重が申告と0.5kgを超えて違えばX線", "X線写真の不審物"]
     }
   };
 
@@ -70,7 +71,7 @@
   V.CITATION_FREE = 2;
   V.CITATION_FINE = 5;
   V.EXPENSES = [
-    { key: "rent", label: "家賃", cost: 20, must: true },
+    { key: "rent", label: "家賃", cost: 20 },
     { key: "food", label: "食費", cost: 10 },
     { key: "power", label: "電気代", cost: 5 },
     { key: "meds", label: "アイリの薬", cost: 15 }
@@ -101,6 +102,7 @@
       seal: ["先週、窓口でもらった券です。", "印章なんて見ていませんでした。"],
       heart: ["緊張しているだけです。", "…持病のことは書いていません。"],
       hair: ["今朝、自宅で抜いた毛です。", "…はさみで切りました。"],
+      hairMissing: ["台紙? 聞いていません。", "家に忘れてきました。"],
       mass: ["朝食を食べすぎて。", "量り方がおかしいのでは。"],
       xray: ["…それは、薬です。", "触らないでください。"]
     },
@@ -115,7 +117,7 @@
   // 指定のない値は applicant.js が自然な値で埋める。欠点は書類と身体から自動で導く。
   V.SCRIPTED = {
     1: [
-      { at: 0, id: "rina", first: "リナ", last: "オカフォー", latin: "RINA OKAFOR", sex: "女", role: "乗客", seed: 101,
+      { at: 0, id: "rina", first: "リナ", last: "オカフォー", latin: "RINA OKAFOR", sex: "女", role: "乗客", seed: 101, issuedAgo: 12,
         greet: ["おはようございます。エリュシオン行きの、最初の便です。", "母が先に上で待っているんです。"],
         tutorial: true },
       { at: 2, id: "tam", first: "タム", last: "ベルグ", latin: "TAM BERG", sex: "男", role: "乗客", seed: 202,
@@ -126,7 +128,7 @@
         permit: { zone: "清掃区画" },
         greet: ["清掃のクラインです。いつもの区画へ。", "…上には行きませんよ。行けませんから。"] },
       { at: 5, id: "kai", first: "カイ", last: "ヴェルナー", latin: "KAI WERNER", sex: "男", role: "乗客", seed: 404,
-        predH: [176, 182], actualH: 188, sampleMut: [5, 11],
+        predH: [176, 182], actualH: 188, sampleMut: [5, 11], issuedAgo: 9,
         greet: ["ヴェルナーです。妹を残していくのは心苦しいけど。"],
         replies: { genome: "…機械がおかしいんだ。もう一度採ってくれ。", height: "靴だよ。厚底なんだ。" } }
     ],
@@ -148,8 +150,8 @@
       { at: 0, id: "nora", first: "ノラ", last: "ヴェルナー", latin: "NORA WERNER", sex: "女", role: "乗客", seed: 909,
         greet: ["ヴェルナーです。兄が、おととい、ここを通ったはずなんです。"] },
       { at: 2, id: "sol", first: "ソル", last: "アデイェミ", latin: "SOL ADEYEMI", sex: "男", role: "乗客", seed: 1010,
-        hair: "cut", xray: "pouch", massDiff: 0.9,
-        greet: ["アデイェミです。毛髪は持ってきました。今朝、自宅で抜いたものです。"],
+        hair: "cut", xray: "pouch", massDiff: 0.9, issuedAgo: 20,
+        greet: ["アデイェミです。毛髪の台紙も持ってきました。今朝、自宅で抜いたものです。"],
         replies: { hair: "…抜いたって言ったでしょう。", xray: "それは常備薬だ。触らないでくれ。", mass: "朝食のせいだ。" } },
       { at: 4, id: "hallow2", first: "ジェイ", last: "ハロウ", latin: "JAY HALLOW", sex: "男", role: "乗員", seed: 707, hand: "左", fresh: 0.8,
         greet: ["また会いましたね。ハロウです。", "今朝は少し急いで来たもので。"] }

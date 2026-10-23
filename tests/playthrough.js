@@ -28,10 +28,10 @@ const server = http.createServer((q, r) => {
   // 現在の申請者を「正しく」処理する(書類を並べ、検体を取り、欠点を指摘し、正しい判定を下す)
   const setup = () => page.evaluate(() => {
     const s = V.game.scene, A = s.cur;
-    const pos = { id: [200, 92], ticket: [200, 166], permit: [300, 166], med: [290, 96], envelope: [300, 214] };
+    const pos = { id: [200, 92], ticket: [200, 162], permit: [292, 162], med: [292, 92], envelope: [300, 214], hairCard: [312, 214] };
     s.items.filter(d => d.owner === A && pos[d.kind]).forEach(d => { d.loc = "desk"; [d.x, d.y] = pos[d.kind]; d.dirty = true; });
-    s.analyzer = { seq: A.sample, fresh: A.fresh, busy: 0, owner: A };
-    if (s.day >= 3) s.loupe = { hair: A.hairSample, owner: A };
+    if (A.target) { s.analyzer = { seq: A.sample, fresh: A.fresh, busy: 0, owner: A }; A.sampled = true; }
+    if (A.ticket && Math.abs(A.massActual - A.ticket.mass) > 0.5) A.xrayTaken = true;
     return { name: A.name, best: V.applicant.truth(A).best, flaws: V.applicant.flaws(A).map(f => f.type) };
   });
   const finish = () => page.evaluate(() => {
@@ -64,9 +64,10 @@ const server = http.createServer((q, r) => {
         await page.evaluate(() => { const s = V.game.scene; s.rules.loc = "slot"; s.rules.x = 172; s.rules.y = 230; s.rules.dirty = true; });
       }
       if (day === 3 && info.name.includes("アデイェミ")) {
-        await page.evaluate(() => { V.game.scene.xray = true; });
+        await page.evaluate(() => { const s = V.game.scene; s.cur.xrayTaken = false; s.requestSample("kitXray"); });
+        await page.waitForTimeout(2800);
+        await page.evaluate(() => { const s = V.game.scene, f = s.items.find(d => d.kind === "xfilm"); f.loc = "desk"; f.x = 404; f.y = 182; f.dirty = true; const h = s.items.find(d => d.kind === "hairCard"); s.loupe.loc = "desk"; s.loupe.x = h.x + 20; s.loupe.y = h.y + 4; });
         await shot("d3-sol-xray");
-        await page.evaluate(() => { V.game.scene.xray = false; });
       }
       if (day === 1 && info.name.includes("ヴェルナー")) {
         await page.evaluate(() => { const s = V.game.scene, id = s.fieldsAt().find(f => f.key === "id.genome"); s.inspect = true; s.sel = id; s.mouse = { x: 420, y: 108 }; });
