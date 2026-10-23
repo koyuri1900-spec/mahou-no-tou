@@ -6,7 +6,8 @@
   const toNum = d => { const [y, m, dd] = d.split(".").map(Number); return Date.UTC(y, m - 1, dd) / 86400000; };
   const fromNum = n => { const d = new Date(n * 86400000); return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")}`; };
   const addDays = (d, k) => fromNum(toNum(d) + k);
-  V.date = { toNum, fromNum, addDays };
+  const daysBetween = (a, b) => toNum(b) - toNum(a);
+  V.date = { toNum, fromNum, addDays, daysBetween };
 
   function randSeq(r) { let s = ""; for (let i = 0; i < 16; i++) s += BASES[r.int(0, 3)]; return s; }
   function mutate(seq, positions, r) {
@@ -63,6 +64,7 @@
       dob: `${r.int(2041, 2069)}.${String(r.int(1, 12)).padStart(2, "0")}.${String(r.int(1, 28)).padStart(2, "0")}`,
       idNo: `GX-${r.int(1000, 9999)}-${r.int(1000, 9999)}`,
       expiry: spec.expiry || addDays(today, r.int(40, 900)),
+      issued: addDays(today, -(spec.issuedAgo ?? r.int(60, 1400))),
       predH, actualH: spec.actualH || r.int(predH[0], predH[1]),
       genome, sample: spec.sampleMut ? mutate(genome, spec.sampleMut, r) : genome,
       fresh: spec.fresh || 0,
@@ -71,6 +73,7 @@
       ticket: null, permit: null, med: null, envelope: !!spec.envelope,
       heart: spec.heart || "normal",
       hairSample: spec.hair || "root",
+      hairCard: false,
       massActual: 0,
       xray: spec.xray || null,
       greet: spec.greet || [r.pick(V.LINES.greet[role])],
@@ -92,8 +95,14 @@
     }
     if (spec.med) A.med = Object.assign({ name: latin, cond: "不整脈" }, spec.med);
     if (flaw) applyFlaw(A, flaw, r, today);
+    A.target = isTarget(A);
+    if (day >= 3 && A.target && A.planted !== "hairMissing") A.hairCard = true;
     return A;
   }
+
+  // 採血(と3日目からは毛髪台紙)の対象者:乗員と、IDの発行から30日以内の者
+  function isTarget(A) { return A.role === "乗員" || daysBetween(A.issued, V.DATES[A.day]) <= V.SAMPLE_DAYS; }
+  const recent = (A, r, today) => { A.issued = addDays(today, -r.int(3, 28)); };
 
   // 名もなき申請者に欠点を1つ仕込む
   function applyFlaw(A, flaw, r, today) {
@@ -102,15 +111,16 @@
       case "status": if (A.role === "地上職員") A.permit = null; A.status = "INVALID"; break;
       case "permit": A.role = "地上職員"; A.status = "INVALID"; A.ticket = null; A.look.coat = V.S[3];
         A.permit = { name: A.latin, zone: "整備区画", expiry: addDays(today, -r.int(1, 30)) }; break;
-      case "genome": { const n = r.int(1, 3), pos = []; while (pos.length < n) { const p = r.int(0, 15); if (!pos.includes(p)) pos.push(p); } A.sample = mutate(A.genome, pos, r); break; }
+      case "genome": { if (A.role === "地上職員") { A.role = "乗客"; A.status = "VALID"; A.permit = null; } recent(A, r, today); const n = r.int(1, 3), pos = []; while (pos.length < n) { const p = r.int(0, 15); if (!pos.includes(p)) pos.push(p); } A.sample = mutate(A.genome, pos, r); break; }
       case "height": A.actualH = r.chance(0.6) ? A.predH[1] + r.int(4, 9) : A.predH[0] - r.int(5, 9); break;
       case "ticketName": if (A.ticket) A.ticket.name = typo(A.latin, r); break;
       case "ticketDate": if (A.ticket) A.ticket.date = addDays(today, r.pick([-2, -1, 1, 3])); break;
       case "seal": if (A.ticket) A.ticket.seal = V.SEAL_OLD; break;
       case "heart": A.heart = "irregular"; A.med = null; break;
-      case "hair": A.hairSample = "cut"; break;
-      case "mass": if (A.ticket) A.massActual = Math.round((A.ticket.mass + r.int(8, 25) / 10) * 10) / 10; break;
-      case "xray": A.xray = "pouch"; if (A.ticket) A.massActual = Math.round((A.ticket.mass + r.int(1, 3) / 10) * 10) / 10; break;
+      case "hair": if (A.role === "地上職員") break; recent(A, r, today); A.hairSample = "cut"; break;
+      case "hairMissing": if (A.role === "地上職員") break; recent(A, r, today); break;
+      case "mass": if (A.ticket) A.massActual = Math.round((A.ticket.mass + r.int(7, 18) / 10) * 10) / 10; break; // 体重は違うが、X線には何も写らない
+      case "xray": if (!A.ticket) break; A.xray = "pouch"; A.massActual = Math.round((A.ticket.mass + r.int(7, 15) / 10) * 10) / 10; break;
     }
     A.planted = flaw;
   }
@@ -138,8 +148,8 @@
     }
     if (checks.includes("seal") && A.ticket && A.ticket.seal !== V.SEAL_CURRENT) add("seal", "ticket.seal", "rule.seal", "deny");
     if (checks.includes("heart") && A.heart === "irregular" && !(A.med && A.med.name === A.latin)) add("heart", "heart", "rule.heart", "deny");
-    if (checks.includes("hair") && A.hairSample === "cut") add("hair", "hair", "rule.hair", "detain");
-    if (checks.includes("mass") && A.ticket && Math.abs(A.massActual - A.ticket.mass) > 0.5) add("mass", "ticket.mass", "scale", "detain");
+    if (checks.includes("hair") && A.target && !A.hairCard) add("hairMissing", "rule.hair", A.role === "乗員" ? "id.class" : "id.issued", "deny");
+    if (checks.includes("hair") && A.hairCard && A.hairSample === "cut") add("hair", "hair", "rule.hair", "detain");
     if (checks.includes("xray") && A.xray) add("xray", "xray", "rule.xray", "detain");
     return out;
   }
@@ -168,9 +178,9 @@
   function flawPool(day) {
     const p = ["expired", "status", "permit", "genome", "height", "genome", "height"];
     if (day >= 2) p.push("ticketName", "ticketDate", "seal", "seal", "heart", "heart");
-    if (day >= 3) p.push("hair", "hair", "mass", "xray", "xray");
+    if (day >= 3) p.push("hair", "hair", "hairMissing", "mass", "xray", "xray");
     return p;
   }
 
-  V.applicant = { create, flaws, truth, match, reply, flawPool };
+  V.applicant = { create, flaws, truth, match, reply, flawPool, isTarget };
 })();

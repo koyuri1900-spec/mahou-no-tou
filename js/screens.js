@@ -149,11 +149,14 @@
     constructor(game, result) {
       this.game = game; this.result = result; this.mouse = { x: 0, y: 0 }; this.t = 0;
       this.day = game.state.day;
-      this.pay = {}; V.EXPENSES.forEach(e => this.pay[e.key] = true);
       this.bribeNew = !!result.flags.bribe;
+      // 借金はできない。払える分だけ、優先度の高い費用から自動で払う
+      this.pay = {}; let left = this.available();
+      ["rent", "meds", "food", "power"].forEach(k => { const e = V.EXPENSES.find(e => e.key === k); this.pay[k] = e.cost <= left; if (this.pay[k]) left -= e.cost; });
       this.go = { x: 340, y: 240, w: 110, h: 18 };
     }
     income() { return this.result.stats.earned + (this.bribeNew ? 40 : 0); }
+    available() { return Math.max(0, this.game.state.credits + this.income()); }
     total() { return V.EXPENSES.reduce((s, e) => s + (this.pay[e.key] ? e.cost : 0), 0); }
     rows() { return V.EXPENSES.map((e, i) => ({ e, x: 30, y: 128 + i * 14, w: 200, h: 12 })); }
     update(dt) { this.t += dt; }
@@ -171,16 +174,17 @@
       g.text("家計", 26, 114, S[7]);
       g.text(`所持 ₡${st.credits} + 収入 ₡${this.income()}`, 230, 114, S[5], { align: "right" });
       this.rows().forEach(r => {
-        const on = this.pay[r.e.key], hov = inRect(this.mouse.x, this.mouse.y, r) && !r.e.must;
-        g.rect(r.x, r.y + 1, 9, 9, S[0]); g.frame(r.x, r.y + 1, 9, 9, hov ? S[8] : S[5]);
+        const on = this.pay[r.e.key], can = on || this.total() + r.e.cost <= this.available(), hov = inRect(this.mouse.x, this.mouse.y, r) && can;
+        g.rect(r.x, r.y + 1, 9, 9, S[0]); g.frame(r.x, r.y + 1, 9, 9, hov ? S[8] : can ? S[5] : S[3]);
         if (on) g.rect(r.x + 2, r.y + 3, 5, 5, S[8]);
-        g.text(r.e.label + (r.e.must ? "(必須)" : ""), r.x + 14, r.y + 2, on ? S[7] : S[4]);
-        g.text("₡" + r.e.cost, 230, r.y + 2, on ? S[7] : S[4], { align: "right" });
+        g.text(r.e.label, r.x + 14, r.y + 2, on ? S[7] : can ? S[5] : S[3]);
+        g.text(on ? "₡" + r.e.cost : can ? "払わない" : "払えない", 230, r.y + 2, on ? S[7] : can ? S[5] : V.RED, { align: "right" });
       });
-      const after = st.credits + this.income() - this.total();
+      const after = this.available() - this.total();
       g.rect(30, 186, 200, 1, S[3]);
-      g.text("残り", 30, 190, S[7]); g.text("₡" + after, 230, 190, after < 0 ? V.RED : S[8], { align: "right" });
-      if (after < 0) g.text("足りない分は借金になる。", 30, 202, V.RED);
+      g.text("残り", 30, 190, S[7]); g.text("₡" + after, 230, 190, S[8], { align: "right" });
+      const unpaid = V.EXPENSES.filter(e => !this.pay[e.key]).map(e => e.label);
+      if (unpaid.length) g.para("払わない:" + unpaid.join("・") + (this.pay.rent ? "" : `(家賃の滞納 ${(st.rentDue || 0) + 1}日目)`), 30, 202, 200, V.RED);
       // アイリ
       const hx = 262;
       g.rect(hx - 10, 40, 1, 190, S[2]);
@@ -211,11 +215,17 @@
     onMove(x, y) { this.mouse = { x, y }; }
     onDown(x, y) {
       const r = this.rows().find(r => inRect(x, y, r));
-      if (r && !r.e.must) { this.pay[r.e.key] = !this.pay[r.e.key]; V.audio.sfx.click(); return; }
+      if (r) {
+        if (this.pay[r.e.key]) this.pay[r.e.key] = false;
+        else if (this.total() + r.e.cost <= this.available()) this.pay[r.e.key] = true;
+        else { V.audio.sfx.nothing(); return; }
+        V.audio.sfx.click(); return;
+      }
       if (inRect(x, y, this.go)) {
         V.audio.sfx.click();
         const st = this.game.state;
-        st.credits = st.credits + this.income() - this.total();
+        st.credits = this.available() - this.total();
+        st.rentDue = this.pay.rent ? 0 : (st.rentDue || 0) + 1;
         st.airi = this.previewHealth();
         st.stats.processed += this.result.stats.processed; st.stats.correct += this.result.stats.correct; st.stats.citations += this.result.stats.citations;
         this.game.endNight();

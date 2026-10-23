@@ -27,9 +27,42 @@ test("カイの欠点は身長と遺伝子の2つ", () => {
   assert.strictEqual(types, "genome,height");
 });
 
-test("ソルの欠点は毛髪・質量・X線", () => {
+test("ソルの欠点は毛髪とX線", () => {
   const types = [...V.applicant.flaws(make(3, "sol")).map(f => f.type)].sort().join(",");
-  assert.strictEqual(types, "hair,mass,xray");
+  assert.strictEqual(types, "hair,xray");
+});
+
+test("採血の対象者:乗員と、ID発行から30日以内の者", () => {
+  assert.strictEqual(make(1, "rina").target, true);
+  assert.strictEqual(make(1, "kai").target, true);
+  assert.strictEqual(make(1, "tam").target, false);
+  assert.strictEqual(make(2, "hallow").target, true);
+  assert.strictEqual(make(2, "mira").target, false);
+});
+
+test("遺伝子の不一致は、採血の対象者にだけ仕込まれる", () => {
+  for (const day of [1, 2, 3]) for (let seed = 1; seed < 300; seed++) {
+    const A = V.applicant.create(day, seed, null, "genome");
+    assert.ok(A.target, `${day}日目 seed ${seed}`);
+  }
+});
+
+test("3日目:対象者は毛髪台紙を出し、台紙がなければ不適格", () => {
+  for (let seed = 1; seed < 200; seed++) {
+    const A = V.applicant.create(3, seed, null, null);
+    assert.strictEqual(A.hairCard, A.target);
+    const B = V.applicant.create(3, seed, null, "hairMissing");
+    if (B.role !== "地上職員") { assert.strictEqual(B.hairCard, false); assert.strictEqual(V.applicant.truth(B).best, "deny"); }
+  }
+});
+
+test("体重が違うだけの申請者は、X線に何も写らず適格", () => {
+  for (let seed = 1; seed < 200; seed++) {
+    const A = V.applicant.create(3, seed, null, "mass");
+    if (!A.ticket) continue;
+    assert.ok(Math.abs(A.massActual - A.ticket.mass) > 0.5);
+    assert.strictEqual(A.xray, null);
+  }
 });
 
 test("照合の組み合わせは順不同", () => {
@@ -47,8 +80,9 @@ test("名もなき申請者:仕込んだ欠点が必ず判定に現れる", () =
       const flaw = r.pick(V.applicant.flawPool(day));
       const A = V.applicant.create(day, seed, null, flaw);
       const f = V.applicant.flaws(A);
-      const noTicket = ["ticketName", "ticketDate", "seal", "mass"].includes(flaw) && !A.ticket;
-      if (noTicket) continue;
+      const noTicket = ["ticketName", "ticketDate", "seal", "xray"].includes(flaw) && !A.ticket;
+      const staffSkip = ["hair", "hairMissing"].includes(flaw) && A.role === "地上職員";
+      if (noTicket || staffSkip || flaw === "mass") continue; // mass は体重が違うだけで、偽装ではない
       assert.ok(f.length > 0, `${day}日目 seed ${seed} 欠点 ${flaw} が判定に出ない`);
       assert.ok(["deny", "detain"].includes(V.applicant.truth(A).best));
     }

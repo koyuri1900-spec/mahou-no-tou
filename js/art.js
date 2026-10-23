@@ -4,29 +4,28 @@
 
   // ---- 画面の配置(ドット座標)----
   V.L = {
-    top: { x: 0, y: 0, w: 480, h: 12 },
-    full: { x: 438, y: 1, w: 40, h: 10 },
-    hall: { x: 0, y: 12, w: 480, h: 72 },
+    hint: { x: 0, y: 0, w: 480, h: 11 },
+    full: { x: 458, y: 13, w: 18, h: 11 },
+    hall: { x: 0, y: 0, w: 480, h: 84 },
+    board: { x: 96, y: 13, w: 72, h: 20 },
+    kiosk: { x: 96, y: 36, w: 72, h: 44 },
     booth: { x: 0, y: 84, w: 168, h: 186 },
     win: { x: 4, y: 86, w: 160, h: 128 },
-    heart: { x: 126, y: 88, w: 36, h: 14 },
-    scale: { x: 126, y: 198, w: 36, h: 14 },
-    talk: { x: 4, y: 216, w: 160, h: 28 },
-    tray: { x: 4, y: 246, w: 160, h: 22 },
+    heart: { x: 126, y: 198, w: 36, h: 14 },
+    scale: { x: 6, y: 198, w: 40, h: 14 },
+    tray: { x: 4, y: 216, w: 160, h: 28 },
+    clock: { x: 4, y: 247, w: 82, h: 21 },
+    bookSlot: { x: 90, y: 247, w: 34, h: 21 },
+    citeBox: { x: 128, y: 247, w: 36, h: 21 },
     desk: { x: 168, y: 84, w: 312, h: 186 },
-    kitBlood: { x: 172, y: 90, w: 22, h: 22 },
-    kitHair: { x: 172, y: 116, w: 22, h: 22 },
-    clock: { x: 200, y: 88, w: 66, h: 30 },
-    alarm: { x: 272, y: 88, w: 72, h: 26 },
+    kitBlood: { x: 172, y: 88, w: 22, h: 22 },
+    kitXray: { x: 172, y: 114, w: 22, h: 22 },
+    alarm: { x: 250, y: 88, w: 72, h: 26 },
     analyzer: { x: 374, y: 88, w: 102, h: 56 },
-    loupe: { x: 374, y: 148, w: 102, h: 40 },
-    citeBox: { x: 172, y: 196, w: 30, h: 30 },
-    bookSlot: { x: 172, y: 230, w: 30, h: 36 },
-    call: { x: 206, y: 234, w: 50, h: 15 },
-    inspect: { x: 206, y: 252, w: 50, h: 15 },
-    xbtn: { x: 260, y: 234, w: 40, h: 15 },
-    drawerTab: { x: 410, y: 256, w: 66, h: 14 },
-    drawer: { x: 226, y: 196, w: 250, h: 58 }
+    loupeCase: { x: 374, y: 148, w: 44, h: 26 },
+    drawerTab: { x: 468, y: 118, w: 12, h: 70 },
+    drawer: { x: 394, y: 104, w: 86, h: 144 },
+    inspect: { x: 418, y: 252, w: 58, h: 16 }
   };
 
   // 身長の壁:205cm が窓の上端近く、140cm が窓の中ほど。頭頂の高さで身長を読む。
@@ -39,41 +38,50 @@
   // ---- 背景(1日ごとに作り直す。ロケットの組み上がりが変わる)----
   function background(day) {
     const g = V.gfx.art(480, 270), L = V.L;
-    // 上の案内板
-    g.rect(0, 0, 480, 12, S[1]); g.rect(0, 12, 480, 1, S[0]);
     // ホールの壁
-    g.rect(0, 13, 480, 71, S[2]);
-    g.dither(0, 13, 480, 10, S[1], 0.5);
+    g.rect(0, 0, 480, 84, S[2]);
+    g.dither(0, 0, 480, 12, S[1], 0.5);
     // 大窓と発射台
-    g.rect(196, 18, 278, 50, S[0]);
-    g.rect(198, 20, 274, 46, S[4]);
-    for (let y = 20; y < 66; y++) g.dither(198, y, 274, 1, S[5], 1 - (y - 20) / 40);
-    g.dither(198, 56, 274, 10, S[3], 0.5);
-    for (let x = 198; x < 472; x += 46) g.rect(x, 20, 2, 46, S[0]);
-    g.rect(198, 42, 274, 1, S[0]);
-    // 発射塔と組み立て中のロケット
+    g.rect(196, 14, 278, 50, S[0]);
+    g.rect(198, 16, 274, 46, S[4]);
+    for (let y = 16; y < 62; y++) g.dither(198, y, 274, 1, S[5], 1 - (y - 16) / 40);
+    g.dither(198, 52, 274, 10, S[3], 0.5);
+    for (let x = 198; x < 472; x += 46) g.rect(x, 16, 2, 46, S[0]);
+    g.rect(198, 38, 274, 1, S[0]);
     const tx = 398;
-    g.rect(tx, 24, 3, 42, S[1]); g.rect(tx + 10, 24, 3, 42, S[1]);
-    for (let y = 26; y < 66; y += 5) { g.rect(tx, y, 13, 1, S[1]); g.px(tx + 4 + (y % 2), y + 2, S[1]); }
-    g.rect(tx - 12, 22, 34, 2, S[1]); g.rect(tx - 12, 22, 1, 10, S[1]);
-    const stages = Math.min(3, day);
-    const rh = [16, 26, 36][stages - 1];
-    g.rect(tx + 16, 66 - rh, 9, rh, S[1]);
-    g.rect(tx + 14, 56, 2, 10, S[1]); g.rect(tx + 25, 56, 2, 10, S[1]);
-    if (stages >= 3) { g.rect(tx + 17, 66 - rh - 3, 7, 3, S[1]); g.rect(tx + 19, 66 - rh - 5, 3, 2, S[1]); }
-    g.rect(196, 66, 278, 2, S[0]);
-    // 柱
-    [40, 112].forEach(x => { g.rect(x, 13, 9, 63, S[1]); g.rect(x + 7, 13, 2, 63, S[3]); });
+    g.rect(tx, 20, 3, 42, S[1]); g.rect(tx + 10, 20, 3, 42, S[1]);
+    for (let y = 22; y < 62; y += 5) { g.rect(tx, y, 13, 1, S[1]); g.px(tx + 4 + (y % 2), y + 2, S[1]); }
+    g.rect(tx - 12, 18, 34, 2, S[1]); g.rect(tx - 12, 18, 1, 10, S[1]);
+    const stages = Math.min(3, day), rh = [16, 26, 36][stages - 1];
+    g.rect(tx + 16, 62 - rh, 9, rh, S[1]);
+    g.rect(tx + 14, 52, 2, 10, S[1]); g.rect(tx + 25, 52, 2, 10, S[1]);
+    if (stages >= 3) { g.rect(tx + 17, 62 - rh - 3, 7, 3, S[1]); g.rect(tx + 19, 62 - rh - 5, 3, 2, S[1]); }
+    g.rect(196, 62, 278, 2, S[0]);
     // 床
     g.rect(0, 76, 480, 8, S[1]);
     for (let x = 0; x < 480; x += 20) g.rect(x, 76, 1, 8, S[2]);
     g.rect(0, 76, 480, 1, S[3]);
-    // ベルトの仕切り
-    for (let x = 64; x < 470; x += 40) { g.rect(x, 66, 2, 10, S[4]); g.rect(x - 1, 65, 4, 2, S[5]); }
-    for (let x = 64; x < 430; x += 40) g.rect(x + 2, 68, 38, 1, S[3]);
-    // ゲートの扉
-    g.rect(150, 40, 18, 36, S[0]); g.rect(152, 42, 14, 34, S[3]); g.rect(158, 42, 2, 34, S[2]);
-    g.rect(0, 84, 480, 1, S[0]);
+    // 行列の仕切り
+    for (let x = 184; x < 470; x += 40) { g.rect(x, 64, 2, 12, S[4]); g.rect(x - 1, 63, 4, 2, S[5]); }
+    for (let x = 184; x < 430; x += 40) g.rect(x + 2, 66, 38, 1, S[3]);
+    // 出発口(左端)
+    g.rect(6, 22, 40, 54, S[0]); g.rect(9, 25, 34, 51, S[1]);
+    g.rect(9, 25, 34, 6, S[3]);
+    g.dither(9, 31, 34, 45, S[0], 0.35);
+    // 改札の柵
+    g.rect(48, 60, 3, 16, S[4]); g.rect(48, 60, 30, 2, S[4]);
+    // 詰所(あなたの窓口)
+    const k = L.kiosk;
+    g.rect(k.x, k.y, k.w, k.h, S[1]); g.frame(k.x, k.y, k.w, k.h, S[0]);
+    g.rect(k.x + 6, k.y + 6, k.w - 12, 24, S[0]);
+    g.rect(k.x + 7, k.y + 7, k.w - 14, 22, S[3]);
+    g.dither(k.x + 7, k.y + 7, k.w - 14, 22, S[4], 0.2);
+    g.rect(k.x + 4, k.y + 32, k.w - 8, 3, S[4]);
+    g.rect(k.x + k.w - 6, k.y + 10, 6, 26, S[3]);
+    // 掲示板の枠
+    const bd = L.board;
+    g.rect(bd.x, bd.y, bd.w, bd.h, S[0]); g.frame(bd.x, bd.y, bd.w, bd.h, S[4]);
+    g.rect(bd.x + 34, bd.y + bd.h, 4, k.y - bd.y - bd.h, S[1]);
 
     // 窓口(左下)
     g.rect(0, 85, 168, 185, S[1]);
@@ -91,21 +99,18 @@
     const base = Math.round(V.cmToY(135));
     g.rect(w.x, base, w.w, w.y + w.h - base, S[2]);
     g.dither(w.x, base, w.w, w.y + w.h - base, S[1], 0.25);
-    // 会話欄・受取口
-    g.rect(L.talk.x - 1, L.talk.y - 1, L.talk.w + 2, L.talk.h + 2, S[0]);
-    g.rect(L.talk.x, L.talk.y, L.talk.w, L.talk.h, S[2]);
+    // 受取口(窓口の入口)と、その下の時計・規則冊子・切符入れ
     g.rect(L.tray.x - 1, L.tray.y - 1, L.tray.w + 2, L.tray.h + 2, S[0]);
     g.rect(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[0]);
     g.dither(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[2], 0.35);
     g.rect(L.tray.x, L.tray.y, L.tray.w, 2, S[3]);
+    [L.clock, L.bookSlot, L.citeBox].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
 
     // 机(右下)
     const d = L.desk;
     g.rect(d.x, d.y + 1, d.w, d.h, S[2]);
     g.dither(d.x, d.y + 1, d.w, d.h, S[3], 0.07);
     g.rect(d.x, d.y + 1, 1, d.h, S[0]);
-    // 規則冊子の置き場
-    g.rect(L.bookSlot.x - 1, L.bookSlot.y - 1, L.bookSlot.w + 2, L.bookSlot.h + 2, S[1]);
     return g.canvas;
   }
 
@@ -196,11 +201,48 @@
 
   // ID用の小さな顔写真(24×30)
   function photo(A) {
-    const big = bust(A, {}, 0.9), cx = Math.round(geom(A, 0.9).cx);
-    const g = V.gfx.art(24, 30);
-    g.rect(0, 0, 24, 30, S[5]);
-    g.ctx.drawImage(big, cx - 12, 0, 24, 30, 0, 2, 24, 30);
+    const big = bust(A, {}, 0.75), cx = Math.round(geom(A, 0.75).cx);
+    const g = V.gfx.art(20, 26);
+    g.rect(0, 0, 20, 26, S[5]);
+    g.ctx.drawImage(big, cx - 10, 0, 20, 26, 0, 2, 20, 26);
     return g.canvas;
+  }
+
+  // ホールの人物(横向き、8×18)。walk は歩きの段階、facing は -1=左 1=右
+  function walker(g, x, y, seed, frame, facing) {
+    const r = V.rng(seed), coat = r.pick([S[3], S[4], S[5], S[1], S[6]]), skin = r.pick([S[7], S[6], S[5], S[4]]), hair = r.pick([S[0], S[1], S[5]]);
+    g.rect(x - 1, y + 17, 10, 1, S[0]);
+    g.rect(x + 1, y + 6, 6, 8, coat);
+    g.rect(x + 2, y, 4, 5, skin); g.rect(x + 2, y, 4, 2, hair);
+    g.rect(facing < 0 ? x + 2 : x + 5, y + 2, 1, 1, S[0]);
+    const st = frame % 4;
+    g.rect(x + 2 + (st === 1 ? -1 : st === 3 ? 1 : 0), y + 14, 2, 3, S[1]);
+    g.rect(x + 5 + (st === 1 ? 1 : st === 3 ? -1 : 0), y + 14, 2, 3, S[1]);
+  }
+
+  // 警備員(10×22)。alert で身構える
+  function guard(g, x, y, t, alert) {
+    const sway = alert ? 0 : Math.round(Math.sin(t * 1.2) * 0.5);
+    g.rect(x - 1, y + 21, 12, 1, S[0]);
+    g.rect(x + 1, y + 7 + sway, 8, 10, S[0]);
+    g.rect(x + 2, y + 1 + sway, 6, 6, S[5]);
+    g.rect(x + 1, y + sway, 8, 3, S[0]); g.rect(x, y + 2 + sway, 10, 1, S[0]);
+    g.rect(x + 2, y + 17, 2, 4, S[0]); g.rect(x + 6, y + 17, 2, 4, S[0]);
+    g.rect(x + 3, y + 9 + sway, 4, 1, S[4]);
+    if (alert) { g.rect(x + 9, y + 8, 3, 2, S[0]); g.rect(x + 11, y + 6, 1, 6, S[4]); }
+  }
+
+  // 詰所の中に座るあなた(後ろ斜めから)
+  function inspector(g, x, y, t, busy) {
+    const look = busy ? Math.round(Math.sin(t * 0.7) * 1) : 0;
+    g.rect(x, y + 9, 16, 9, S[0]);
+    g.rect(x + 3 + look, y + 1, 9, 9, S[1]);
+    g.rect(x + 3 + look, y + 1, 9, 3, S[0]);
+    g.rect(x + 11 + look, y + 4, 2, 3, S[4]);
+    g.rect(x + 16, y + 12, 6, 2, S[0]);
+    // 卓上の灯り
+    g.rect(x + 26, y + 6, 1, 10, S[0]); g.rect(x + 22, y + 5, 8, 2, S[0]);
+    g.dither(x + 18, y + 7, 16, 9, S[6], 0.18);
   }
 
   // 行列の人(8×18)
@@ -225,5 +267,5 @@
     g.text(ver, x, y - 4, S[2], { align: "center" });
   }
 
-  V.art = { background, bust, bustX, photo, queuePerson, seal };
+  V.art = { background, bust, bustX, photo, queuePerson, seal, walker, guard, inspector };
 })();
