@@ -79,6 +79,7 @@
       greet: spec.greet || [r.pick(V.LINES.greet[role])],
       replies: spec.replies || {},
       tutorial: !!spec.tutorial,
+      violent: spec.violent ?? r.chance(0.35),
       found: new Set()
     };
     // 書類

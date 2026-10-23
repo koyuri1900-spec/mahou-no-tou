@@ -25,7 +25,8 @@
     loupeCase: { x: 374, y: 148, w: 44, h: 26 },
     drawerTab: { x: 468, y: 118, w: 12, h: 70 },
     drawer: { x: 394, y: 104, w: 86, h: 144 },
-    inspect: { x: 418, y: 252, w: 58, h: 16 }
+    inspect: { x: 418, y: 252, w: 58, h: 16 },
+    endBtn: { x: 172, y: 252, w: 58, h: 16 }
   };
 
   // 身長の壁:205cm が窓の上端近く、140cm が窓の中ほど。頭頂の高さで身長を読む。
@@ -233,16 +234,21 @@
   }
 
   // 詰所の中に座るあなた(後ろ斜めから)
+  // 窓口の外に向いて(右向き)座る。右の小窓の先に申請者が立つ
   function inspector(g, x, y, t, busy) {
-    const look = busy ? Math.round(Math.sin(t * 0.7) * 1) : 0;
-    g.rect(x, y + 9, 16, 9, S[0]);
-    g.rect(x + 3 + look, y + 1, 9, 9, S[1]);
-    g.rect(x + 3 + look, y + 1, 9, 3, S[0]);
-    g.rect(x + 11 + look, y + 4, 2, 3, S[4]);
-    g.rect(x + 16, y + 12, 6, 2, S[0]);
-    // 卓上の灯り
-    g.rect(x + 26, y + 6, 1, 10, S[0]); g.rect(x + 22, y + 5, 8, 2, S[0]);
-    g.dither(x + 18, y + 7, 16, 9, S[6], 0.18);
+    const look = busy ? Math.round(Math.sin(t * 0.7) * 0.6) : 0;
+    // 卓上の灯り(背中側)
+    g.rect(x - 10, y + 6, 1, 10, S[0]); g.rect(x - 14, y + 5, 8, 2, S[0]);
+    g.dither(x - 18, y + 7, 14, 9, S[6], 0.15);
+    // 椅子と体
+    g.rect(x - 2, y + 6, 3, 13, S[0]);
+    g.rect(x, y + 9, 13, 9, S[0]);
+    g.rect(x + 2 + look, y + 1, 9, 9, S[1]);
+    g.rect(x + 2 + look, y + 1, 9, 3, S[0]);
+    g.rect(x + 9 + look, y + 4, 2, 2, S[4]);
+    // 前に伸ばした腕と机
+    g.rect(x + 11, y + 12, 9, 2, S[0]);
+    g.rect(x + 8, y + 15, 16, 2, S[3]);
   }
 
   // 行列の人(8×18)

@@ -63,7 +63,7 @@
       this.drag = null;
       this.flying = [];
       this.walkers = [];
-      this.guardX = 62; this.guardAway = 0;
+      this.guard = { x: 62, state: "post", t: 0 };
       this.mouse = { x: 0, y: 0 };
       this.msg = null;
       this.served = 0;
@@ -94,15 +94,17 @@
       this.flying = this.flying.filter(f => (f.t += dt) < 0.45);
       this.walkers.forEach(w => { w.x += w.vx * dt; w.f += dt * 8; });
       this.walkers = this.walkers.filter(w => w.x > -20 && w.x < 500);
-      if (this.guardAway > 0) this.guardAway = Math.max(0, this.guardAway - dt);
+      this.updateGuard(dt);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
+      if (this.endConfirm > 0) this.endConfirm = Math.max(0, this.endConfirm - dt);
       this.talkT += dt;
       this.items.forEach(d => { if (d.slide > 0) d.slide = Math.max(0, d.slide - dt * 3); });
+      if (this.rules.flip && (this.rules.flip.t += dt) > 0.32) this.rules.flip = null;
       if (this.analyzer.busy > 0) this.analyzer.busy = Math.max(0, this.analyzer.busy - dt);
       if (this.phase === "entering" && (this.phaseT += dt) > 0.9) { this.phase = "present"; this.phaseT = 0; }
       if (this.phase === "away" && (this.phaseT += dt) > 2.4) this.returnFromXray();
       if (this.phase === "leaving" && (this.phaseT += dt) > 0.9) this.finishApplicant();
-      if (this.phase === "detained" && (this.phaseT += dt) > 1.8) this.finishApplicant();
+      if (this.phase === "detained") this.phaseT += dt;
       if (this.started && this.clock >= DAY_MINUTES && !this.cur && !this.ended) this.endShift();
       if (this.ended) { this.fade = Math.min(1, this.fade + dt * 0.8); if (this.fade >= 1 && !this.done) { this.done = true; V.audio.stopHall(); this.game.toNight(this.summary()); } }
       if (V.setCursor) V.setCursor(this.drag ? "grabbing" : this.inspect ? "crosshair" : this.hoverClickable() ? "pointer" : "default");
@@ -212,7 +214,7 @@
 
     // 偽装を指摘された申請者が暴れだす → 拘束のボタンが出る
     agitate(A) {
-      if (A.agitated) return;
+      if (A.agitated || !A.violent) return; // 暴れるのは一部の人だけ。暴れなければ【不適格】で帰す
       this.after(1.1, () => {
         if (this.cur !== A || this.phase !== "present" || this.verdict) return;
         A.agitated = true;
@@ -230,7 +232,34 @@
       this.say("you", "警備、来てくれ。");
       this.say("them", pick(V.LINES.detained));
       V.audio.sfx.alarm();
-      this.phase = "detained"; this.phaseT = 0;
+      this.phase = "detained"; this.phaseT = 0; this.grabT = -1;
+      // 警備員は持ち場から窓口の前まで駆けつける
+      Object.assign(this.guard, { state: "run", t: 0 });
+    }
+
+    // 警備員の動き:持ち場 → 駆けつける → 腕を取る → 連れて右へ去る → しばらくして持ち場へ戻る
+    updateGuard(dt) {
+      const gd = this.guard;
+      gd.t += dt;
+      if (gd.state === "run") {
+        gd.x = Math.min(186, gd.x + 80 * dt);
+        if (gd.x >= 186) { gd.state = "grab"; gd.t = 0; V.audio.sfx.drop(); this.say("them", "(警備員に腕をつかまれた)"); }
+      } else if (gd.state === "grab") {
+        if (gd.t > 0.7) {
+          gd.state = "escort"; gd.t = 0;
+          this.grabT = 0;
+          this.walkers.push({ x: 172, y: 58, vx: 26, f: 0, seed: this.cur ? this.cur.seed : 1, dir: 1, escorted: true });
+        }
+      } else if (gd.state === "escort") {
+        gd.x += 26 * dt;
+        if (this.phase === "detained" && gd.t > 0.9 && this.cur) this.finishApplicant();
+        if (gd.x > 500) { gd.state = "away"; gd.t = 0; }
+      } else if (gd.state === "away") {
+        if (gd.t > 3) { gd.state = "return"; gd.x = 500; }
+      } else if (gd.state === "return") {
+        gd.x = Math.max(62, gd.x - 42 * dt);
+        if (gd.x <= 62) { gd.state = "post"; gd.x = 62; }
+      }
     }
 
     // 書類を申請者へ手渡す
@@ -265,9 +294,9 @@
       if (A.scripted) this.game.state.flags[A.id] = verdict;
       // 窓口を離れた人は、ホールを通り抜けていく
       const seed = A.seed;
-      if (verdict === "approve" || verdict === "limit") this.walkers.push({ x: 172, y: 58, vx: -34, f: 0, seed, dir: -1 });
-      else if (verdict === "deny") this.walkers.push({ x: 176, y: 62, vx: 30, f: 0, seed, dir: 1 });
-      else if (verdict === "detain") { this.walkers.push({ x: 172, y: 58, vx: -22, f: 0, seed, dir: -1 }); this.walkers.push({ x: 184, y: 56, vx: -22, f: 0, guard: true, dir: -1 }); this.guardAway = 9; }
+      // 適格・限定は出発口(左)へ、不適格はそのまま右へ帰る。拘束は警備員が連れていく(updateGuard)
+      if (verdict === "approve" || verdict === "limit") this.walkers.push({ x: 170, y: 58, vx: -34, f: 0, seed, dir: -1 });
+      else if (verdict === "deny") this.walkers.push({ x: 174, y: 60, vx: 30, f: 0, seed, dir: 1 });
       this.cur = null; this.verdict = null; this.phase = "empty";
       this.closeInspect();
       if (this.clock >= DAY_MINUTES) this.say("sys", "18:00。受付終了。");
@@ -311,6 +340,15 @@
       V.audio.sfx.citation();
     }
 
+    // 業務終了:窓口が空いているときに、確認つきで早めに切り上げる
+    pressEnd() {
+      if (!this.started || this.ended) return;
+      if (this.cur) { this.note("申請者の審査を終えてから、業務を終了してください。"); return; }
+      if (this.endConfirm > 0) { this.endConfirm = 0; this.say("sys", `${this.clockText()} 業務を終了した。`); this.endShift(); return; }
+      this.endConfirm = 3; V.audio.sfx.click();
+      this.note("もう一度押すと、今日の業務を終了します。", 3);
+    }
+
     endShift() {
       this.ended = true;
       this.drawer = false; this.closeInspect();
@@ -331,7 +369,8 @@
         d.fields.forEach(f => {
           if (f.key.startsWith("tab.")) return;
           const sz = d.size(), r = { key: f.key, x: d.x + f.x, y: d.y + f.y, w: f.w, h: f.h, label: f.label, doc: d, box: { x: d.x, y: d.y, w: sz.w, h: sz.h } };
-          if (this.topDocAt(r.x + r.w / 2, r.y + r.h / 2) === d) out.push(r);
+          const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+          if (this.topDocAt(cx, cy) === d && !this.onDevice(cx, cy)) out.push(r);
         });
       });
       if (A && this.phase === "present") {
@@ -404,10 +443,12 @@
       }
       if (this.cur && this.cur.agitated && this.phase === "present" && !this.verdict && inRect(x, y, L.alarm)) { this.detain(); return; }
       if (inRect(x, y, L.inspect)) { if (this.started) this.toggleInspect(); return; }
+      if (inRect(x, y, L.endBtn)) { this.pressEnd(); return; }
       // 規則冊子のページ送り
       if (this.rules.loc === "desk" && this.topDocAt(x, y) === this.rules) {
+        this.rules.render(this.day); // 開いた直後でも、矢印の位置を確かめられるように
         const f = this.rules.fields.find(f => f.key.startsWith("tab.") && inRect(x - this.rules.x, y - this.rules.y, f));
-        if (f) { this.rules.page += f.key === "tab.next" ? 1 : -1; this.rules.dirty = true; V.audio.sfx.paper(); return; }
+        if (f) { const dir = f.key === "tab.next" ? 1 : -1; this.rules.page += dir; this.rules.dirty = true; this.rules.flip = { dir, t: 0 }; V.audio.sfx.paper(); return; }
       }
       if (this.inspect) {
         const f = this.fieldAt(x, y);
@@ -423,6 +464,7 @@
       // 道具棚
       if (inRect(x, y, L.kitBlood)) { this.startKit("kitBlood", x, y); return; }
       if (this.day >= 3 && inRect(x, y, L.kitXray)) { this.startKit("kitXray", x, y); return; }
+      if (this.onDevice(x, y)) return;
       // 受取口:縮んだ姿の、つかんだ位置がそのまま書類のつかんだ位置になる
       const t = this.trayHit(x, y);
       if (t) {
@@ -466,7 +508,7 @@
         it.loc = "desk"; it.x = V.clamp(it.x, L.desk.x, 480 - it.w); it.y = V.clamp(it.y, L.desk.y - 10, 270 - it.h); return;
       }
       // 規則冊子をクリックしただけなら、机の空いた場所に開く
-      if (it.kind === "rules" && dg.from === "slot" && Math.hypot(x - dg.sx, y - dg.sy) < 3) { it.loc = "desk"; it.x = 250; it.y = 118; it.dirty = true; V.audio.sfx.paper(); return; }
+      if (it.kind === "rules" && dg.from === "slot" && Math.hypot(x - dg.sx, y - dg.sy) < 3) { it.loc = "desk"; it.x = 196; it.y = 150; it.dirty = true; V.audio.sfx.paper(); return; }
       if (it.kind === "citation" && inRect(x, y, L.citeBox)) { this.items = this.items.filter(d => d !== it); V.audio.sfx.drop(); return; }
       if (it.kind === "rules" && inRect(x, y, L.bookSlot)) { this.toSlot(it); return; }
       // 申請者へ手渡す
@@ -496,36 +538,20 @@
       if (x >= L.desk.x && y >= L.desk.y) { this.dropOnDesk(it); V.audio.sfx.drop(); return; }
       this.putBack(it, dg);
     }
+    // 机の右端・下端からはみ出してもよいが、つかめるように 35% は机の上に残す
     dropOnDesk(it) {
       it.loc = "desk"; it.dirty = true;
       const { w, h } = it.size();
-      it.x = V.clamp(it.x, L.desk.x + 1, 480 - w); it.y = V.clamp(it.y, L.desk.y + 1, 270 - h);
-      this.avoidDevices(it, w, h);
+      it.x = V.clamp(it.x, L.desk.x + 1, 480 - Math.round(w * 0.35)); it.y = V.clamp(it.y, L.desk.y + 1, 270 - Math.round(h * 0.35));
     }
-    // 机に据え付けた装置(解析機・ルーペの収納・道具棚)の上には置けない。重なったら、いちばん近い空いた位置へずらす
-    blockedRects() {
-      const m = 2, grow = r => ({ x: r.x - m, y: r.y - m, w: r.w + m * 2, h: r.h + m * 2 });
-      const list = [L.analyzer, { x: L.kitBlood.x, y: L.kitBlood.y, w: L.kitBlood.w, h: (this.day >= 3 ? L.kitXray.y + L.kitXray.h : L.kitBlood.y + L.kitBlood.h) - L.kitBlood.y }];
+    // 机に据え付けた装置。常に書類より上に描き、その上のクリックは装置のものとして扱う
+    deviceRects() {
+      const list = [L.analyzer, L.kitBlood];
+      if (this.day >= 3) list.push(L.kitXray);
       if (this.loupe) list.push(L.loupeCase);
-      list.push(L.drawerTab, L.inspect);
-      return list.map(grow);
+      return list;
     }
-    avoidDevices(it, w, h) {
-      const blocks = this.blockedRects();
-      const hits = (x, y) => blocks.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y);
-      if (!hits(it.x, it.y)) return;
-      const minX = L.desk.x + 1, maxX = 480 - w, minY = L.desk.y + 1, maxY = 270 - h;
-      let best = null;
-      blocks.forEach(b => [[b.x - w, it.y], [b.x + b.w, it.y], [it.x, b.y - h], [it.x, b.y + b.h]].forEach(([x, y]) => {
-        if (x < minX || x > maxX || y < minY || y > maxY || hits(x, y)) return;
-        const d = Math.hypot(x - it.x, y - it.y);
-        if (!best || d < best.d) best = { x, y, d };
-      }));
-      if (!best) { // 近くに空きがなければ、机の中央下に置く
-        for (let y = maxY; y >= minY && !best; y -= 6) for (let x = minX + 30; x <= maxX && !best; x += 6) if (!hits(x, y)) best = { x, y };
-      }
-      if (best) { it.x = Math.round(best.x); it.y = Math.round(best.y); }
-    }
+    onDevice(x, y) { return this.deviceRects().some(r => inRect(x, y, r)) || inRect(x, y, L.endBtn) || inRect(x, y, L.inspect); }
     putBack(it, dg) {
       if (dg.from === "tray") { it.loc = "tray"; return; }
       if (it.kind === "rules" && dg.from === "slot") { this.toSlot(it); return; }
@@ -587,11 +613,13 @@
       this.drawBoothBottom(g);
       this.drawDeskFixed(g);
       this.items.filter(d => d.loc === "desk" || d.loc === "slot").sort((a, b) => a.z - b.z).forEach(d => this.drawDoc(g, d));
+      this.drawDevices(g);
       this.drawFlying(g);
       this.drawAlarm(g);
       if (this.loupe && this.loupe.loc !== "hand") this.drawLoupe(g, this.loupe);
       this.drawDrawer(g);
       button(g, L.inspect, "照合  F", this.started, this.inspect);
+      button(g, L.endBtn, this.endConfirm > 0 ? "本当に終了?" : "業務終了", this.started && !this.cur && !this.ended, this.endConfirm > 0);
       if (this.drag) {
         const it = this.drag.item;
         if (it.kit) this.drawKit(g, it.kind, it.x, it.y, true);
@@ -608,7 +636,7 @@
       [[2, 2, 1], [f.w - 5, 2, 1], [2, f.h - 3, 1], [f.w - 5, f.h - 3, 1]].forEach(([dx, dy]) => { g.rect(f.x + dx, f.y + dy, 3, 1, S[8]); g.rect(f.x + dx + (dx > 4 ? 2 : 0), f.y + dy - (dy > 4 ? 1 : 0), 1, 2, S[8]); });
       if (this.msg) { const w = V.Surface.measure(this.msg.text) + 16; g.rect(324 - w / 2, 160, w, 14, S[0]); g.frame(324 - w / 2, 160, w, 14, S[5]); g.text(this.msg.text, 324, 163, S[8], { align: "center" }); }
       if (this.fade > 0) g.rect(0, 0, 480, 270, `rgba(13,20,23,${this.fade})`);
-      if (this.ended && this.fade > 0.3) g.text("18:00  業務終了", 240, 128, S[8], { align: "center", size: 32 });
+      if (this.ended && this.fade > 0.3) g.text(`${this.clockText()}  業務終了`, 240, 128, S[8], { align: "center", size: 32 });
     }
 
     drawHall(g) {
@@ -632,17 +660,24 @@
       if (can) { g.frame(bd.x - 1, bd.y - 1, bd.w + 2, bd.h + 2, Math.floor(this.t * 2) % 2 ? S[8] : S[5]); }
       // 詰所の中のあなた
       const k = L.kiosk;
-      V.art.inspector(g, k.x + 14, k.y + 9, this.t, !!A);
-      // 窓口に立つ申請者(ホール側)
-      if (A && (this.phase === "present" || this.phase === "entering")) {
-        const ax = this.phase === "entering" ? Math.round(188 - (this.phaseT / 0.9) * 16) : 172;
-        V.art.walker(g, ax, 58, A.seed, this.phase === "entering" ? Math.floor(this.t * 8) : 0, -1);
+      V.art.inspector(g, k.x + 34, k.y + 9, this.t, !!A);
+      // 窓口の前の計量台(一段高い)
+      g.rect(166, 73, 20, 3, S[4]); g.rect(166, 76, 20, 1, S[0]); g.rect(166, 73, 20, 1, S[5]);
+      // 窓口に立つ申請者(ホール側):詰所の中のあなたと向き合う
+      const escorting = this.guard.state === "grab" || this.guard.state === "escort";
+      if (A && !escorting && (this.phase === "present" || this.phase === "entering" || this.phase === "detained" || this.phase === "leaving")) {
+        let ax = 170, ay = 55, fr = 0, dir = -1;
+        if (this.phase === "entering") { const k2 = this.phaseT / 0.9; ax = Math.round(190 - Math.min(1, k2 * 1.3) * 20); ay = k2 > 0.75 ? 55 : 58; fr = Math.floor(this.t * 8); }
+        if (this.phase === "leaving") { const k2 = this.phaseT / 0.9; dir = this.verdict === "deny" ? 1 : -1; ax = Math.round(170 + dir * k2 * 10); ay = k2 > 0.2 ? 58 : 55; fr = Math.floor(this.t * 8); }
+        V.art.walker(g, ax, ay, A.seed, fr, dir);
+        if (A.agitated && this.phase !== "leaving") { g.rect(ax + (Math.sin(this.t * 30) > 0 ? -2 : 8), ay + 6, 2, 3, S[6]); }
       }
       // 警備員
-      const alert = !!(A && A.agitated);
-      if (this.guardAway <= 0) V.art.guard(g, this.guardX, 54, this.t, alert);
+      const gd = this.guard;
+      // 持ち場では立ち位置(奥)、動くときは詰所の手前の通路を通る
+      if (gd.state !== "away") V.art.guard(g, Math.round(gd.x), gd.state === "post" ? 54 : 60, this.t, gd.state !== "post" || !!(A && A.agitated));
       // 通り抜けていく人々
-      this.walkers.forEach(w => { if (w.guard) V.art.guard(g, Math.round(w.x), 54, this.t, true); else V.art.walker(g, Math.round(w.x), w.y, w.seed, Math.floor(w.f), w.dir); });
+      this.walkers.forEach(w => V.art.walker(g, Math.round(w.x), w.y, w.seed, Math.floor(w.f), w.dir));
       g.text("出発口", 26, 26, S[5], { align: "center" });
     }
 
@@ -651,9 +686,13 @@
       const ctx = g.ctx; ctx.save(); ctx.beginPath(); ctx.rect(w.x * 2, w.y * 2, w.w * 2, w.h * 2); ctx.clip();
       for (let cm = 140; cm <= 200; cm += 10) g.text(String(cm), w.x + 10, Math.round(V.cmToY(cm)) - 9, S[5]);
       if (A && this.phase !== "away") {
-        let dx = 0;
-        if (this.phase === "entering") dx = Math.round((1 - this.phaseT / 0.9) * 120);
-        if (this.phase === "leaving") dx = -Math.round((this.phaseT / 0.9) * 120);
+        let dx = 0, dy = 0;
+        // 入ってきて、計量台に一段上がる
+        if (this.phase === "entering") { const k2 = this.phaseT / 0.9; dx = Math.round(Math.max(0, 1 - k2 * 1.3) * 120); dy = k2 > 0.75 ? 0 : 8; }
+        // 適格・限定は左(出発口)へ、不適格は右へ帰る
+        if (this.phase === "leaving") { const k2 = this.phaseT / 0.9; dx = (this.verdict === "deny" ? 1 : -1) * Math.round(Math.max(0, k2 - 0.2) * 150); dy = k2 > 0.2 ? 8 : 0; }
+        // 拘束:腕を取られ、右へ連れ出される
+        if (this.phase === "detained" && this.grabT >= 0) { dx = Math.round(this.guard.t * 130); dy = 8; }
         const top = Math.round(V.cmToY(A.actualH));
         const nervous = this.phase === "present" && A.found.size > 0, angry = !!A.agitated;
         const key = (nervous ? 1 : 0) + (angry ? 2 : 0);
@@ -661,10 +700,13 @@
         const shake = angry && this.phase === "present" ? Math.round(Math.sin(this.t * 40) * 1.5) : 0;
         const bx = Math.round(w.x + w.w / 2 - A._bust.width / 2) + dx + shake;
         const breath = this.phase === "present" ? Math.round(Math.sin(this.t * (nervous ? 5 : 2.4)) * 0.6 + 0.4) : 0;
-        g.img(A._bust, bx, top - 1 + breath);
-        if (this.phase === "detained") {
-          const k = Math.min(1, this.phaseT / 0.6);
-          [-1, 1].forEach(s => { const gx = w.x + w.w / 2 + s * (110 - k * 62) - 16; g.rect(gx, w.y + 20, 32, 110, S[0]); g.rect(gx + 8, w.y + 8, 16, 16, S[0]); g.rect(gx + 5, w.y + 6, 22, 5, S[1]); });
+        g.img(A._bust, bx, top - 1 + breath + dy);
+        if (this.phase === "detained" && (this.guard.state === "grab" || this.guard.state === "escort")) {
+          // 警備員が右から入り、腕を取る
+          const k3 = this.guard.state === "grab" ? Math.min(1, this.guard.t / 0.4) : 1;
+          const gx = Math.round(w.x + w.w + 6 - k3 * 64) + (this.guard.state === "escort" ? Math.round(this.guard.t * 130) : 0);
+          g.rect(gx, w.y + 34, 40, 100, S[0]); g.rect(gx + 10, w.y + 12, 22, 24, S[0]); g.rect(gx + 6, w.y + 8, 30, 7, S[1]); g.rect(gx + 6, w.y + 14, 30, 2, S[1]);
+          g.rect(gx - 18, w.y + 70, 22, 7, S[0]);
         }
       } else if (A && this.phase === "away") {
         g.text("(X線室で撮影中…)", w.x + w.w / 2, w.y + 60, S[6], { align: "center" });
@@ -701,7 +743,7 @@
           }
         } else g.text("心拍", h.x + h.w / 2, h.y + 3, S[4], { align: "center" });
       }
-      if (this.day >= 3 && this.started) {
+      if (this.started) {
         const s = L.scale;
         g.rect(s.x - 1, s.y - 1, s.w + 2, s.h + 2, S[0]); g.rect(s.x, s.y, s.w, s.h, S[0]);
         g.text(present ? A.massActual.toFixed(1) + "kg" : "--.-kg", s.x + s.w - 3, s.y + 3, present ? S[8] : S[4], { align: "right" });
@@ -763,7 +805,10 @@
       });
     }
 
-    drawDeskFixed(g) {
+    drawDeskFixed(g) {}
+
+    // 据え付けの装置は、書類より上に描く
+    drawDevices(g) {
       const A = this.cur;
       this.drawKit(g, "kitBlood", L.kitBlood.x, L.kitBlood.y);
       if (this.day >= 3) this.drawKit(g, "kitXray", L.kitXray.x, L.kitXray.y);
@@ -832,6 +877,16 @@
       if (held) g.rect(d.x + 3, d.y + 3, w, h, "rgba(13,20,23,.45)");
       else g.rect(d.x + 1, d.y + 1 + sy, w, h, "rgba(13,20,23,.6)");
       g.imgSame(c, d.x, d.y + sy);
+      // ページをめくる動き:片側のページが背に向かって倒れ、反対側に開く
+      if (d.kind === "rules" && d.flip && d.loc !== "slot") {
+        const k = d.flip.t / 0.32, PW = (d.w - 20) / 2, mid = d.x + d.w / 2, top = d.y + 3, ph = d.h - 6;
+        const from = d.flip.dir > 0 ? 1 : -1;
+        const half = k < 0.5 ? from : -from, wv = Math.round(PW * Math.abs(1 - k * 2));
+        const x = half > 0 ? mid : mid - wv;
+        g.rect(x, top, wv, ph, S[8]);
+        g.rect(half > 0 ? x + wv - 1 : x, top, 1, ph, S[4]);
+        g.rect(x, top + ph - 1, wv, 1, S[5]);
+      }
     }
 
     drawDrawer(g) {

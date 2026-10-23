@@ -52,7 +52,7 @@
     3: {
       head: "検体の持ち込み相次ぐ ― 毛髪と血液に注意",
       body: "他人の毛髪や血液を持ち込み、遺伝子照合をすり抜けようとする手口が増えている。当局は本日から毛髪台紙の提出と計量、X線撮影を義務づけた。",
-      side: ["最終便の乗員名簿、今夜公開", "帰還ゲートの再開は未定"],
+      side: ["最終便の乗員名簿、今夜公開", "当局、最終日に臨時の生体検査を検討"],
       rules: ["採血の対象者は毛髪台紙も提出(毛根を確認)", "体重が申告と0.5kgを超えて違えばX線", "X線写真の不審物"]
     }
   };
@@ -128,7 +128,7 @@
         permit: { zone: "清掃区画" },
         greet: ["清掃のクラインです。いつもの区画へ。", "…上には行きませんよ。行けませんから。"] },
       { at: 5, id: "kai", first: "カイ", last: "ヴェルナー", latin: "KAI WERNER", sex: "男", role: "乗客", seed: 404,
-        predH: [176, 182], actualH: 188, sampleMut: [5, 11], issuedAgo: 9,
+        predH: [176, 182], actualH: 188, sampleMut: [5, 11], issuedAgo: 9, violent: true,
         greet: ["ヴェルナーです。妹を残していくのは心苦しいけど。"],
         replies: { genome: "…機械がおかしいんだ。もう一度採ってくれ。", height: "靴だよ。厚底なんだ。" } }
     ],
@@ -141,7 +141,7 @@
         heart: "irregular", med: { cond: "発作性心房細動(治療済)" },
         greet: ["医師のプラムです。上の診療所に赴任します。", "心拍が気になるなら、記録を持ってきました。"] },
       { at: 3, id: "hallow", first: "ジェイ", last: "ハロウ", latin: "JAY HALLOW", sex: "男", role: "乗員", seed: 707, hand: "左",
-        greet: ["航法士のハロウです。今日から最終便の訓練区画へ。", "(差し出したペンを、迷ってから右手で受け取った)"] },
+        greet: ["航法士のハロウです。最終便の乗員候補として、今日から毎朝ここを通ります。", "(差し出したペンを、迷ってから右手で受け取った)"] },
       { at: 5, id: "broker", first: "サイ", last: "マロ", latin: "SAI MARO", sex: "男", role: "乗客", seed: 808,
         envelope: true,
         greet: ["書類は全部そろってますよ。", "それと…これは忘れ物です。お子さんの薬代にでも。"] }
@@ -150,11 +150,11 @@
       { at: 0, id: "nora", first: "ノラ", last: "ヴェルナー", latin: "NORA WERNER", sex: "女", role: "乗客", seed: 909,
         greet: ["ヴェルナーです。兄が、おととい、ここを通ったはずなんです。"] },
       { at: 2, id: "sol", first: "ソル", last: "アデイェミ", latin: "SOL ADEYEMI", sex: "男", role: "乗客", seed: 1010,
-        hair: "cut", xray: "pouch", massDiff: 0.9, issuedAgo: 20,
+        hair: "cut", xray: "pouch", massDiff: 0.9, issuedAgo: 20, violent: false,
         greet: ["アデイェミです。毛髪の台紙も持ってきました。今朝、自宅で抜いたものです。"],
         replies: { hair: "…抜いたって言ったでしょう。", xray: "それは常備薬だ。触らないでくれ。", mass: "朝食のせいだ。" } },
       { at: 4, id: "hallow2", first: "ジェイ", last: "ハロウ", latin: "JAY HALLOW", sex: "男", role: "乗員", seed: 707, hand: "左", fresh: 0.8,
-        greet: ["また会いましたね。ハロウです。", "今朝は少し急いで来たもので。"] }
+        greet: ["おはようございます。今日もよろしく。", "(採血の針を見て、一瞬だけ目をそらした)"] }
     ]
   };
 
