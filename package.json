@@ -1,12 +1,11 @@
 {
-  "name": "mahou-no-tou",
-  "version": "1.1.0",
-  "description": "魔力の塔 ― ブラウザで遊べる放置型クリッカー(静的サイト)",
+  "name": "valid",
+  "version": "0.1.0",
+  "description": "VALID ― 遺伝子がすべてを決める世界の身分審査ゲーム(試作版、静的サイト)",
   "private": true,
   "scripts": {
-    "test": "node --test tests/game.test.js tests/save.test.js tests/visual.test.js",
-    "test:e2e": "python3 tests/e2e.py",
-    "simulate": "node tools/simulate.js 240 4",
+    "test": "node --test tests/logic.test.js",
+    "test:e2e": "node tests/playthrough.js && node tests/smoke.js",
     "serve": "python3 -m http.server 8000"
   }
 }
