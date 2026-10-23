@@ -36,50 +36,63 @@ const server = http.createServer((q, r) => {
   await shot("02-news");
   await click(390, 247); // 業務を始める
   await page.waitForTimeout(800);
-  await shot("03-shift-empty");
-  await click(143, 234); // 呼出
+  await shot("03-briefing");
+  await click(84, 198); // 業務開始
+  await click(231, 241); // 呼出
   await page.waitForTimeout(2200);
   await shot("04-applicant");
-  // 受取口の ID を机へ
-  const tray = await page.evaluate(() => V.game.scene.trayLayout().map(m => ({ kind: m.d.kind, x: m.x + m.w / 2, y: m.y + 6 })));
-  const id = tray.find(t => t.kind === "id");
-  await drag(id.x, id.y, 260, 120);
-  // 採血
-  await drag(183, 101, 60, 245);
+  const trayPos = kind => page.evaluate(k => { const d = V.game.scene.items.find(d => d.loc === "tray" && d.kind === k); const [w, h] = V.docs.MINI[k]; return { x: d.tx + w / 2, y: d.ty + h / 2 }; }, kind);
+  // 受取口の ID を机へ(離した場所に落ちる)
+  const id = await trayPos("id");
+  await drag(id.x, id.y, 290, 150);
+  // 採血キットを申請者へ
+  await drag(183, 101, 84, 150);
   await page.waitForTimeout(1800);
-  const tray2 = await page.evaluate(() => V.game.scene.trayLayout().map(m => ({ kind: m.d.kind, x: m.x + m.w / 2, y: m.y + 6 })));
-  const vial = tray2.find(t => t.kind === "vial");
+  const vial = await trayPos("vial");
   await drag(vial.x, vial.y, 420, 110);
   await page.waitForTimeout(1700);
   await shot("05-analyzed");
   // 照合:ID の署名と解析結果
-  await page.keyboard.press("f");
-  const idDoc = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
-  await click(idDoc.x + 50, idDoc.y + 62);
+  await click(231, 259);
+  const g = await page.evaluate(() => V.game.scene.fieldsAt().find(f => f.key === "id.genome"));
+  await click(g.x + 10, g.y + 4);
   await page.mouse.move(art(420, 108).x, art(420, 108).y);
   await shot("06-inspect");
   await click(420, 108);
-  await page.keyboard.press("f");
-  // 規則冊子を開く
-  await drag(186, 246, 230, 150);
+  await click(231, 259);
+  // 規則冊子:つかむと開く
+  const a1 = art(186, 246), a2 = art(300, 200);
+  await page.mouse.move(a1.x, a1.y); await page.mouse.down(); await page.mouse.move(a2.x, a2.y, { steps: 6 });
+  await shot("07-rules-held"); await page.mouse.up();
   await shot("07-rules");
-  await drag(240, 155, 186, 246);
+  const rb = await page.evaluate(() => ({ x: V.game.scene.rules.x, y: V.game.scene.rules.y }));
+  await drag(rb.x + 20, rb.y + 4, 186, 246);
   // 判定
   await click(440, 262);
   await page.waitForTimeout(400);
   await shot("08-drawer");
-  await click(286, 228); // 適格
+  await click(261, 233); // 適格
   await page.waitForTimeout(300);
-  const idDoc2 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
   await shot("09-stamped");
-  await drag(idDoc2.x + 10, idDoc2.y + 30, 50, 245);
+  const idDoc2 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
+  await drag(idDoc2.x + 10, idDoc2.y + 30, 84, 150); // 申請者へ手渡す
   await page.waitForTimeout(1500);
   const st = await page.evaluate(() => ({ stats: V.game.scene.stats, cur: !!V.game.scene.cur }));
   console.log("after first applicant", JSON.stringify(st));
+  // 2人目(期限切れ)をわざと通して、違反切符を受け取る
+  await click(231, 241);
+  await page.waitForTimeout(2200);
+  const id2 = await trayPos("id");
+  await drag(id2.x, id2.y, 290, 150);
+  await click(440, 262); await page.waitForTimeout(400); await click(261, 233); await page.waitForTimeout(300);
+  const id3 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
+  await drag(id3.x + 10, id3.y + 30, 84, 150);
+  await page.waitForTimeout(1600);
+  await shot("10-citation");
   // 時間を進めて夜へ
   await page.evaluate(() => { V.game.scene.clock = 600; });
   await page.waitForTimeout(2500);
-  await shot("10-night");
+  await shot("11-night");
   console.log("errors", JSON.stringify(errors));
   await browser.close();
   server.close();

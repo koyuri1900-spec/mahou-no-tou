@@ -11,9 +11,9 @@
       this.stamp = null; this.page = 0; this.fields = []; this.canvas = null; this.dirty = true;
     }
     front() { this.z = zTop++; }
-    get open() { return this.kind === "rules" ? this.loc === "desk" : true; }
+    get open() { return this.kind === "rules" ? this.loc !== "slot" : true; }
     size() {
-      if (this.kind === "rules" && this.loc !== "desk") return { w: 30, h: 36 };
+      if (this.kind === "rules" && this.loc === "slot") return { w: 30, h: 36 };
       return { w: this.w, h: this.h };
     }
     render(day) {
@@ -121,9 +121,23 @@
       g.frame(0, 2, d.w, d.h - 2, S[5]);
       for (let k = 0; k < 12; k++) g.rect(4 + k, 9 + Math.round(Math.sin(k / 2) * 2), 1, 1, S[1]);
     },
-    kitBlood(g, d) {},
+    citation(g, d) {
+      const c = d.cite;
+      g.rect(0, 0, d.w, d.h, S[8]);
+      g.rect(0, 0, d.w, 11, V.RED);
+      g.text("違反切符", 4, 1, S[8]);
+      g.text(`No.${c.n}  ${c.time}`, d.w - 4, 1, S[8], { align: "right" });
+      g.text("申請者 " + c.who, 4, 14, S[0]);
+      g.text("あなたの判定 " + c.verdict, 4, 24, S[2]);
+      g.rect(4, 34, d.w - 8, 1, S[5]);
+      let y = 37;
+      c.lines.forEach(t => { y += g.para(t, 4, y, d.w - 8, S[0]) * 10; });
+      if (c.rule) { y += 2; y += g.para("規則:" + c.rule, 4, y, d.w - 8, S[3]) * 10; }
+      g.rect(4, d.h - 13, d.w - 8, 1, S[5]);
+      g.text(c.fine ? `罰金 ₡${c.fine}(給与から差し引く)` : `警告(1日${V.CITATION_FREE}件まで罰金なし)`, 4, d.h - 11, c.fine ? V.RED : S[3]);
+    },
     rules(g, d, day) {
-      if (d.loc !== "desk") {
+      if (d.loc === "slot") {
         g.rect(0, 0, 30, 36, S[1]); g.frame(0, 0, 30, 36, S[4]);
         g.rect(3, 0, 2, 36, S[3]);
         g.text("規則", 15, 13, S[7], { align: "center" });
@@ -163,6 +177,7 @@
   }
 
   // 受取口の中に置くときの小さな姿
+  const MINI = { id: [26, 17], ticket: [24, 14], permit: [22, 14], med: [20, 16], envelope: [16, 10], vial: [6, 12], hair: [12, 10] };
   function mini(g, d, x, y) {
     const look = {
       id: [26, 17, S[7], S[3]], ticket: [24, 14, S[6], S[5]], permit: [22, 14, S[7], S[5]], med: [20, 16, S[8], S[5]],
@@ -179,8 +194,8 @@
     return { w, h };
   }
 
-  const SIZES = { id: [124, 70], ticket: [96, 56], permit: [88, 54], med: [84, 64], envelope: [56, 34], vial: [8, 22], hair: [20, 18], rules: [154, 150] };
+  const SIZES = { id: [124, 70], ticket: [96, 56], permit: [88, 54], med: [84, 64], envelope: [56, 34], vial: [8, 22], hair: [20, 18], rules: [154, 150], citation: [130, 96] };
   function make(kind, owner) { const [w, h] = SIZES[kind]; return new Doc(kind, owner, w, h); }
 
-  V.docs = { Doc, make, mini, stampMark };
+  V.docs = { Doc, make, mini, stampMark, MINI };
 })();
