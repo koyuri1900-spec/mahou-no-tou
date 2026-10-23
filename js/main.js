@@ -33,15 +33,22 @@
   };
   V.game = game;
 
-  // ---- 画面の大きさ:できるだけ整数倍で拡大する ----
+  // ---- 画面の大きさ:縦横比を保ったまま、ウィンドウ(全画面)いっぱいに広げる ----
   function fit() {
     const k = Math.min(window.innerWidth / 480, window.innerHeight / 270);
-    const scale = k >= 2 ? Math.floor(k) : k;
-    canvas.style.width = Math.floor(480 * scale) + "px";
-    canvas.style.height = Math.floor(270 * scale) + "px";
+    canvas.style.width = Math.floor(480 * k) + "px";
+    canvas.style.height = Math.floor(270 * k) + "px";
   }
   window.addEventListener("resize", fit);
+  document.addEventListener("fullscreenchange", fit);
   fit();
+  V.toggleFullscreen = () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    } catch (e) {}
+  };
+  V.setCursor = c => { if (canvas.style.cursor !== c) canvas.style.cursor = c; };
 
   // ---- 入力 ----
   function toArt(e) {
@@ -54,6 +61,7 @@
   canvas.addEventListener("contextmenu", e => e.preventDefault());
   window.addEventListener("keydown", e => {
     if (e.key === "m" || e.key === "M") { V.audio.setMuted(!V.audio.muted); game.saveSettings(); return; }
+    if (e.key === "F11") { e.preventDefault(); V.toggleFullscreen(); return; }
     if (game.scene && game.scene.onKey) { game.scene.onKey(e.key); if (e.key === " ") e.preventDefault(); }
   });
 

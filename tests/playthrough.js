@@ -37,11 +37,9 @@ const server = http.createServer((q, r) => {
   const finish = () => page.evaluate(() => {
     const s = V.game.scene, A = s.cur, t = V.applicant.truth(A);
     V.applicant.flaws(A).forEach(f => A.found.add(f.type));
+    if (t.best === "detain") { A.agitated = true; s.detain(); return t.best; }
     s.decide(t.best);
-    if (t.best !== "detain") {
-      s.items.filter(d => d.owner === A && ["id", "ticket", "permit", "med"].includes(d.kind)).forEach(d => d.loc = "tray");
-      s.checkLeave();
-    }
+    s.items.filter(d => d.owner === A && ["id", "ticket", "permit", "med"].includes(d.kind)).forEach(d => s.handBack(d));
     return t.best;
   });
   const waitEmpty = () => page.waitForFunction(() => !V.game.scene.cur, null, { timeout: 8000 });
@@ -54,6 +52,8 @@ const server = http.createServer((q, r) => {
     await shot(`d${day}-0-news`);
     await page.evaluate(() => V.game.toShift());
     await page.waitForTimeout(700);
+    await shot(`d${day}-1-briefing`);
+    await page.evaluate(() => V.game.scene.start());
     const n = day === 3 ? 6 : 7;
     for (let i = 0; i < n; i++) {
       await call();
@@ -69,9 +69,11 @@ const server = http.createServer((q, r) => {
         await page.evaluate(() => { V.game.scene.xray = false; });
       }
       if (day === 1 && info.name.includes("ヴェルナー")) {
-        await page.evaluate(() => { const s = V.game.scene; s.inspect = true; s.flashes.push({ r: { x: 214, y: 150, w: 98, h: 11 }, t: 5, c: V.RED }, { r: { x: 378, y: 102, w: 98, h: 14 }, t: 5, c: V.RED }); s.say("you", "ゲノム署名と解析結果が合わない。"); s.say("them", "…機械がおかしいんだ。もう一度採ってくれ。"); });
+        await page.evaluate(() => { const s = V.game.scene, id = s.fieldsAt().find(f => f.key === "id.genome"); s.inspect = true; s.sel = id; s.mouse = { x: 420, y: 108 }; });
         await shot("d1-kai-inspect");
-        await page.evaluate(() => { V.game.scene.inspect = false; });
+        await page.evaluate(() => { const s = V.game.scene; s.pickField(s.fieldsAt().find(f => f.key === "seq")); s.closeInspect(); });
+        await page.waitForTimeout(1500);
+        await shot("d1-kai-agitated");
       }
       const v = await finish();
       log.push(`DAY${day} ${info.name} 欠点[${info.flaws.join(",")}] → ${v}`);
