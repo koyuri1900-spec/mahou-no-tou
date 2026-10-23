@@ -209,9 +209,20 @@
     return g.canvas;
   }
 
-  // ホールの人物(横向き、8×18)。walk は歩きの段階、facing は -1=左 1=右
-  function walker(g, x, y, seed, frame, facing) {
-    const r = V.rng(seed), coat = r.pick([S[3], S[4], S[5], S[1], S[6]]), skin = r.pick([S[7], S[6], S[5], S[4]]), hair = r.pick([S[0], S[1], S[5]]);
+  // 正面以外を向いている人は黒い影で描く
+  function silhouette(src) {
+    const c = V.gfx.makeCanvas(src.width, src.height), x = c.getContext("2d");
+    x.drawImage(src, 0, 0);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = S[0]; x.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+
+  // ホールの人物(横向き、8×18)。walk は歩きの段階、facing は -1=左 1=右、sil で影
+  function walker(g, x, y, seed, frame, facing, sil) {
+    const r = V.rng(seed);
+    let coat = r.pick([S[3], S[4], S[5], S[1], S[6]]), skin = r.pick([S[7], S[6], S[5], S[4]]), hair = r.pick([S[0], S[1], S[5]]);
+    if (sil) { coat = S[1]; skin = S[1]; hair = S[0]; }
     g.rect(x - 1, y + 17, 10, 1, S[0]);
     g.rect(x + 1, y + 6, 6, 8, coat);
     g.rect(x + 2, y, 4, 5, skin); g.rect(x + 2, y, 4, 2, hair);
@@ -253,7 +264,9 @@
 
   // 行列の人(8×18)
   function queuePerson(g, x, y, seed, frame) {
-    const r = V.rng(seed), coat = r.pick([S[3], S[4], S[5], S[1], S[6]]), skin = r.pick([S[7], S[6], S[5], S[4]]), hair = r.pick([S[0], S[1], S[5]]);
+    const r = V.rng(seed); r(); r(); r();
+    const coat = S[1], skin = S[1], hair = S[0]; // 列の人々は影
+
     g.rect(x - 1, y + 17, 10, 1, S[0]);
     g.rect(x + 1, y + 6, 6, 8, coat);
     g.rect(x + 2, y, 4, 5, skin); g.rect(x + 2, y, 4, 2, hair);
@@ -273,5 +286,5 @@
     g.text(ver, x, y - 4, S[2], { align: "center" });
   }
 
-  V.art = { background, bust, bustX, photo, queuePerson, seal, walker, guard, inspector };
+  V.art = { background, bust, bustX, photo, queuePerson, seal, walker, guard, inspector, silhouette };
 })();

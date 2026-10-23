@@ -65,7 +65,7 @@ const server = http.createServer((q, r) => {
       }
       if (day === 3 && info.name.includes("アデイェミ")) {
         await page.evaluate(() => { const s = V.game.scene; s.cur.xrayTaken = false; s.requestSample("kitXray"); });
-        await page.waitForTimeout(2800);
+        await page.waitForFunction(() => V.game.scene.phase === "present", null, { timeout: 8000 });
         await page.evaluate(() => { const s = V.game.scene, f = s.items.find(d => d.kind === "xfilm"); f.loc = "desk"; f.x = 404; f.y = 182; f.dirty = true; const h = s.items.find(d => d.kind === "hairCard"); s.loupe.loc = "desk"; s.loupe.x = h.x + 20; s.loupe.y = h.y + 4; });
         await shot("d3-sol-xray");
       }
