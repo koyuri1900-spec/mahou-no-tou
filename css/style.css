@@ -1,0 +1,40 @@
+@font-face {
+  font-family: "DotGothic16";
+  src: url("../assets/fonts/DotGothic16.woff2") format("woff2");
+  font-display: block;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0D1417;
+  color: #D3DADC;
+  font-family: "DotGothic16", monospace;
+  overflow: hidden;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+#screen {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: default;
+  outline: none;
+}
+
+.boot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  margin: 0;
+  text-align: center;
+  font-size: 16px;
+  letter-spacing: .1em;
+}
