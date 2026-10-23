@@ -115,7 +115,8 @@
     hoverClickable() { const m = this.mouse; return (this.canCall() && inRect(m.x, m.y, L.board)) || inRect(m.x, m.y, L.inspect) || inRect(m.x, m.y, L.drawerTab) || inRect(m.x, m.y, L.full); }
 
     after(t, fn) { this.timers.push({ t, fn }); }
-    say(who, text) { this.talk.push({ who, text }); if (this.talk.length > 30) this.talk.shift(); this.talkT = 0; }
+    // 吹き出しに出すのは、あなたの問いかけと申請者の応答だけ(sys は記録のみ)
+    say(who, text) { this.talk.push({ who, text }); if (this.talk.length > 30) this.talk.shift(); if (who !== "sys") this.talkT = 0; }
     note(text, t = 2.6) { this.msg = { text, t }; }
     clockText() { const m = Math.floor(this.clock); return `${String(8 + Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; }
     canCall() { return this.started && !this.cur && !this.ended && !this.closed; }
@@ -184,11 +185,11 @@
       if (kind === "kitBlood") {
         if (this.items.some(d => d.kind === "vial" && d.owner === A) || A.sampled) { this.note("この申請者は採血済みです。"); return; }
         this.say("you", "採血します。指を。"); V.audio.sfx.lancet();
-        this.after(1.4, () => { if (this.cur !== A) return; this.putOneInTray(V.docs.make("vial", A)); this.say("them", "(指先を差し出した)"); V.audio.sfx.drop(); });
+        this.after(1.4, () => { if (this.cur !== A) return; this.putOneInTray(V.docs.make("vial", A)); V.audio.sfx.drop(); });
       } else if (kind === "kitXray") {
         if (A.xrayTaken) { this.note("X線写真はもう届いています。"); return; }
         this.say("you", "X線室で撮影を。この票を持って。");
-        this.say("them", "(X線室へ向かった)");
+        this.say("them", "わかりました。行ってきます。");
         this.phase = "away"; this.phaseT = 0;
       }
     }
@@ -229,7 +230,7 @@
       this.after(1.1, () => {
         if (this.cur !== A || this.phase !== "present" || this.verdict) return;
         A.agitated = true;
-        this.say("them", pick(["ふざけるな! 通せ!", "離せ、本物だと言っているだろう!", "(窓口のガラスを叩きはじめた)"]));
+        this.say("them", pick(["ふざけるな! 通せ!", "離せ、本物だと言っているだろう!", "ここを通せ! 今すぐだ!"]));
         this.say("sys", "申請者が暴れだした。【警備を呼ぶ】で拘束できる。");
         V.audio.sfx.alarm();
       });
@@ -254,7 +255,7 @@
       gd.t += dt;
       if (gd.state === "run") {
         gd.x = Math.min(186, gd.x + 80 * dt);
-        if (gd.x >= 186) { gd.state = "grab"; gd.t = 0; V.audio.sfx.drop(); this.say("them", "(警備員に腕をつかまれた)"); }
+        if (gd.x >= 186) { gd.state = "grab"; gd.t = 0; V.audio.sfx.drop(); }
       } else if (gd.state === "grab") {
         if (gd.t > 0.7) {
           gd.state = "escort"; gd.t = 0;
@@ -426,7 +427,7 @@
         V.audio.sfx.found();
         this.say("you", "体重が申告と合わない。");
         this.say("them", pick(["朝食を食べすぎて。", "量り方がおかしいのでは。"]));
-        this.say("sys", "X線依頼票を申請者に渡して、X線を撮らせる。");
+        A.massNoted = true;
         return;
       }
       const hit = V.applicant.match(A, a.key, b.key);
@@ -618,6 +619,7 @@
       if (!this.started) return "今日の規則と道具を確かめたら、窓口の【業務開始】を押してください。";
       if (this.inspect) return this.sel ? "もう一か所を選ぶと照合します。(右クリック/F で照合をやめる)" : "照合モード:食い違っていそうな2か所を順にクリック。(右クリック/F で終わる)";
       if (A && A.agitated && !this.verdict) return "申請者が暴れている。机の【警備を呼ぶ】で拘束できる。";
+      if (A && A.massNoted && !A.xrayTaken && this.phase === "present") return "体重が申告と違う。道具棚の【X線依頼票】を申請者へ渡して撮らせる。";
       if (day === 1 && this.served === 0) return "上の掲示板をクリックして、最初の申請者を呼んでください。(Space キーでも呼べます)";
       if (A && A.tutorial) {
         const id = this.items.find(d => d.kind === "id" && d.owner === A);
@@ -757,14 +759,15 @@
           if (!A._sil) A._sil = V.art.silhouette(A._bust);
           const bx = Math.round(w.x + w.w / 2 - A._sil.width / 2) - Math.round((t / 0.9) * 160), by = Math.round(V.cmToY(A.actualH)) + 7 - Math.round(Math.abs(Math.sin(this.t * 9)) * 3);
           g.img(A._sil, bx, by);
-        } else g.text("(X線室で撮影中…)", w.x + w.w / 2, w.y + 60, S[6], { align: "center" });
+        }
       } else if (!this.started) {
         this.drawBriefing(g);
       }
       for (let k = 0; k < 34; k++) g.rect(w.x + 124 + k, w.y + 6 + k * 3, 1, 3, "rgba(211,218,220,.08)");
       // 吹き出し(最新の発言)
-      if (this.started && this.talk.length && this.talkT < 9) {
-        const m = this.talk[this.talk.length - 1];
+      const spoken = this.talk.filter(m => m.who !== "sys");
+      if (this.started && spoken.length && this.talkT < 9) {
+        const m = spoken[spoken.length - 1];
         const lines = V.Surface.wrap((m.who === "you" ? "> " : "") + m.text, w.w - 16).slice(0, 3);
         const bh = lines.length * 9 + 4, by = w.y + 3;
         const bg = m.who === "them" ? S[8] : m.who === "you" ? S[1] : "rgba(13,20,23,.85)", fg = m.who === "them" ? S[0] : S[7];
