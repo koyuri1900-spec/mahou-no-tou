@@ -67,5 +67,3 @@ npm run test:e2e               # ブラウザで3日間を通しで遊ぶ(Playwr
 ## 素材と権利
 - フォント:DotGothic16(Fontworks、SIL Open Font License 1.1)。`assets/fonts/OFL.txt` を参照。
 - 絵と音:すべてコードで生成しています。外部の画像・音声素材は使っていません。
-
-以前この場所にあった放置ゲーム「魔力の塔」は、git の履歴に残っています。
