@@ -67,10 +67,10 @@ test("体重が違うだけの申請者は、X線に何も写らず適格", () =
 
 test("照合の組み合わせは順不同", () => {
   const A = make(1, "kai");
-  assert.ok(V.applicant.match(A, "id.genome", "seq"));
-  assert.ok(V.applicant.match(A, "seq", "id.genome"));
-  assert.ok(V.applicant.match(A, "body.height", "id.height"));
-  assert.strictEqual(V.applicant.match(A, "id.name", "today"), null);
+  assert.ok(V.applicant.match(A, "reg.genome", "seq"));
+  assert.ok(V.applicant.match(A, "seq", "reg.genome"));
+  assert.ok(V.applicant.match(A, "body.height", "reg.height"));
+  assert.strictEqual(V.applicant.match(A, "reg.name", "today"), null);
 });
 
 test("名もなき申請者:仕込んだ欠点が必ず判定に現れる", () => {
@@ -103,5 +103,28 @@ test("搭乗券は2日目から、乗客と乗員だけが持つ", () => {
     const a1 = V.applicant.create(1, seed, null, null), a2 = V.applicant.create(2, seed, null, null);
     assert.strictEqual(a1.ticket, null);
     assert.strictEqual(!!a2.ticket, a2.role !== "地上職員");
+  }
+});
+
+test("顔写真の偽装:登録簿の顔か瞳が本人と違えば拘束", () => {
+  for (const day of [1, 2, 3]) for (let seed = 1; seed < 200; seed++) {
+    const A = V.applicant.create(day, seed, null, "faceReg");
+    const f = V.applicant.flaws(A).find(x => x.type === "faceReg");
+    assert.ok(f, `${day}日目 seed ${seed}`);
+    assert.ok(V.applicant.match(A, "face", "reg.photo"));
+    if (A.faceVariant === "eye") assert.ok(V.applicant.match(A, "reg.eye", "face"));
+    assert.strictEqual(V.applicant.truth(A).best, "detain");
+  }
+});
+
+test("カードの偽造:印字が登録簿と違えば拘束。氏名の差し替えは名義の欠点と重ならない", () => {
+  for (const day of [2, 3]) for (let seed = 1; seed < 200; seed++) {
+    const A = V.applicant.create(day, seed, null, "cardForged");
+    const types = V.applicant.flaws(A).map(x => x.type);
+    assert.ok(types.includes("cardForged"), `${day}日目 seed ${seed}`);
+    assert.ok(!types.includes("ticketName") && !types.includes("faceReg"));
+    assert.ok(V.applicant.match(A, "card.photo", "reg.photo"));
+    if (A.forged === "name") assert.ok(V.applicant.match(A, "card.name", "reg.name"));
+    assert.strictEqual(V.applicant.truth(A).best, "detain");
   }
 });

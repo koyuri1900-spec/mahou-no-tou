@@ -261,7 +261,8 @@
         g.text("— アイリ", 330, 90, S[4]);
         g.text("試作版はここまで", 240, 130, S[7], { align: "center", size: 32 });
         g.text(`処理 ${st.stats.processed}人  正しい判定 ${st.stats.correct}  違反 ${st.stats.citations}  所持 ₡${st.credits}`, 240, 166, S[5], { align: "center" });
-        g.text("本編では、帰還ゲート、家族の審査、そして三人のハロウが待っています。", 240, 190, S[4], { align: "center" });
+        g.text("本編では、ハロウは最終日まで何度もこの窓口を通る。", 240, 186, S[4], { align: "center" });
+        g.text("そして最終日、当局は臨時の生体検査を行う。", 240, 198, S[4], { align: "center" });
         btn(g, this.back, "タイトルへ", inRect(this.mouse.x, this.mouse.y, this.back), true);
       }
     }

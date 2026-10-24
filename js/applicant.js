@@ -76,9 +76,13 @@
       hairCard: false,
       massActual: 0,
       xray: spec.xray || null,
+      // 登録簿(IDカードのチップが指す記録)と、カードの印字。ふつうは本人と同じ
+      regLatin: latin, regLook: null, cardLook: null,
+      rec: spec.rec || makeRec(r, role, today),
       greet: spec.greet || [r.pick(V.LINES.greet[role])],
       replies: spec.replies || {},
       tutorial: !!spec.tutorial,
+      violent: spec.violent ?? r.chance(0.35),
       found: new Set()
     };
     // 書類
@@ -100,6 +104,33 @@
     return A;
   }
 
+  // 入構の記録(乗員と地上職員は毎日通る。乗客はふつう初めて)
+  function makeRec(r, role, today) {
+    if (role === "乗員") return { visits: r.int(3, 40), last: addDays(today, -1), verdict: "適格" };
+    if (role === "地上職員") return { visits: r.int(20, 300), last: addDays(today, -1), verdict: null };
+    return r.chance(0.15) ? { visits: 1, last: addDays(today, -r.int(2, 20)), verdict: "不適格" } : { visits: 0 };
+  }
+  // 別人の見た目(髪・瞳・髪型のどれかが必ず違う)
+  function otherLook(A, r) {
+    for (let k = 0; k < 20; k++) {
+      const lk = makeLook(r, A.sex, A.role);
+      if (lk.hair !== A.look.hair || lk.style !== A.look.style || lk.eyeP !== A.look.eyeP) return lk;
+    }
+    return Object.assign({}, A.look, { style: (A.look.style + 1) % 5, hair: A.look.hair === V.S[0] ? V.S[6] : V.S[0] });
+  }
+  // 瞳の色だけが違う見た目
+  function otherEyes(A, r) {
+    const e = r.pick(["B", "G", "b"].filter(c => c !== A.look.eyeP));
+    return Object.assign({}, A.look, { eye: [e, e], eyeP: e });
+  }
+  const regLook = A => A.regLook || A.look;
+  const cardLook = A => A.cardLook || regLook(A);
+  const cardName = A => { const [f, ...l] = A.latin.split(" "); return `${f[0]}.${l.join(" ")}`; };
+  const eyeWord = c => ({ B: "茶", G: "緑", b: "青" })[c];
+  const sameLook = (a, b) => a === b || (a.hair === b.hair && a.style === b.style && a.eyeP === b.eyeP && a.skin === b.skin && a.face === b.face && a.beard === b.beard);
+  // 本人ではない者が来ると、血も別人のものになる
+  const impostorBlood = (A, r) => { A.sample = mutate(A.genome, [r.int(0, 7), r.int(8, 15)], r); };
+
   // 採血(と3日目からは毛髪台紙)の対象者:乗員と、IDの発行から30日以内の者
   function isTarget(A) { return A.role === "乗員" || daysBetween(A.issued, V.DATES[A.day]) <= V.SAMPLE_DAYS; }
   const recent = (A, r, today) => { A.issued = addDays(today, -r.int(3, 28)); };
@@ -119,6 +150,18 @@
       case "heart": A.heart = "irregular"; A.med = null; break;
       case "hair": if (A.role === "地上職員") break; recent(A, r, today); A.hairSample = "cut"; break;
       case "hairMissing": if (A.role === "地上職員") break; recent(A, r, today); break;
+      // 顔写真の偽装:登録簿の顔(または瞳の色)が、窓口の本人と違う(他人のIDを使っている)
+      case "faceReg": A.faceVariant = r.chance(0.5) ? "eye" : "face"; A.regLook = A.faceVariant === "eye" ? otherEyes(A, r) : otherLook(A, r); if (A.target) impostorBlood(A, r); break;
+      // カードの偽造:カードの印字(顔写真、ときに氏名)が、チップの指す登録簿と違う
+      case "cardForged": {
+        if (A.role === "地上職員") { A.role = "乗客"; A.status = "VALID"; A.permit = null; A.look.coat = V.S[4]; }
+        A.regLook = otherLook(A, r); A.cardLook = A.look;
+        A.forged = r.chance(0.5) ? "name" : "photo";
+        if (A.forged === "name") { const f = r.pick(V.NAMES.first), l = r.pick(V.NAMES.last); A.regLatin = `${V.LATIN[f]} ${l[1]}`; if (A.regLatin === A.latin) A.regLatin = typo(A.latin, r); }
+        else if (A.ticket) A.ticket.name = A.latin;
+        if (A.target) impostorBlood(A, r);
+        break;
+      }
       case "mass": if (A.ticket) A.massActual = Math.round((A.ticket.mass + r.int(7, 18) / 10) * 10) / 10; break; // 体重は違うが、X線には何も写らない
       case "xray": if (!A.ticket) break; A.xray = "pouch"; A.massActual = Math.round((A.ticket.mass + r.int(7, 15) / 10) * 10) / 10; break;
     }
@@ -126,31 +169,44 @@
   }
 
   // ---- 欠点の一覧 ----
-  // a と b は照合で選ぶ2つの欄。act は正しい判定(deny=不適格、detain=拘束)。
+  // pairs は照合で選ぶ2つの欄の組(どれか1組で指摘できる)。act は正しい判定(deny=不適格、detain=拘束)。
+  // 登録簿(reg.*)はIDカードを端末に差したときに机に出る記録で、試作版ではつねに正しい。
   function flaws(A) {
     const day = A.day, today = V.DATES[day], checks = V.dayChecks(day), out = [];
-    const add = (type, a, b, act) => out.push({ type, a, b, act });
+    const add = (type, pairs, act) => out.push({ type, pairs, a: pairs[0][0], b: pairs[0][1], act });
     const passenger = A.role !== "地上職員";
-    if (toNum(A.expiry) < toNum(today)) add("expired", "id.expiry", "today", "deny");
-    if (passenger && A.status === "INVALID") add("status", "id.status", "rule.status", "deny");
+    const forgedName = A.regLatin !== A.latin;
+    if (toNum(A.expiry) < toNum(today)) add("expired", [["reg.expiry", "today"]], "deny");
+    if (passenger && A.status === "INVALID") add("status", [["reg.status", "rule.status"]], "deny");
     if (!passenger && A.status === "INVALID") {
-      if (!A.permit) add("status", "id.status", "rule.staff", "deny");
+      if (!A.permit) add("status", [["reg.status", "rule.staff"]], "deny");
       else {
-        if (toNum(A.permit.expiry) < toNum(today)) add("permit", "permit.expiry", "today", "deny");
-        if (A.permit.name !== A.latin) add("permit", "permit.name", "id.name", "deny");
+        if (toNum(A.permit.expiry) < toNum(today)) add("permit", [["permit.expiry", "today"]], "deny");
+        if (A.permit.name !== A.regLatin) add("permit", [["permit.name", "reg.name"]], "deny");
       }
     }
-    if (A.sample !== A.genome) add("genome", "id.genome", "seq", "detain");
-    if (A.actualH > A.predH[1] || A.actualH < A.predH[0]) add("height", "id.height", "body.height", "detain");
-    if (checks.includes("ticket") && A.ticket) {
-      if (A.ticket.name !== A.latin) add("ticketName", "ticket.name", "id.name", "deny");
-      if (A.ticket.date !== today) add("ticketDate", "ticket.date", "today", "deny");
+    // 顔と印字
+    if (!sameLook(cardLook(A), regLook(A)) || forgedName) {
+      const p = [["card.photo", "reg.photo"], ["face", "reg.photo"]];
+      if (forgedName) p.push(["card.name", "reg.name"]);
+      if (forgedName && A.ticket) p.push(["ticket.name", "reg.name"]);
+      add("cardForged", p, "detain");
+    } else if (!sameLook(A.look, regLook(A))) {
+      const p = [["face", "reg.photo"], ["face", "card.photo"]];
+      if (A.look.eyeP !== regLook(A).eyeP) p.push(["face", "reg.eye"]);
+      add("faceReg", p, "detain");
     }
-    if (checks.includes("seal") && A.ticket && A.ticket.seal !== V.SEAL_CURRENT) add("seal", "ticket.seal", "rule.seal", "deny");
-    if (checks.includes("heart") && A.heart === "irregular" && !(A.med && A.med.name === A.latin)) add("heart", "heart", "rule.heart", "deny");
-    if (checks.includes("hair") && A.target && !A.hairCard) add("hairMissing", "rule.hair", A.role === "乗員" ? "id.class" : "id.issued", "deny");
-    if (checks.includes("hair") && A.hairCard && A.hairSample === "cut") add("hair", "hair", "rule.hair", "detain");
-    if (checks.includes("xray") && A.xray) add("xray", "xray", "rule.xray", "detain");
+    if (A.sample !== A.genome) add("genome", [["reg.genome", "seq"]], "detain");
+    if (A.actualH > A.predH[1] || A.actualH < A.predH[0]) add("height", [["reg.height", "body.height"]], "detain");
+    if (checks.includes("ticket") && A.ticket) {
+      if (A.ticket.name !== A.regLatin && !(forgedName && A.ticket.name === A.latin)) add("ticketName", [["ticket.name", "reg.name"]], "deny");
+      if (A.ticket.date !== today) add("ticketDate", [["ticket.date", "today"]], "deny");
+    }
+    if (checks.includes("seal") && A.ticket && A.ticket.seal !== V.SEAL_CURRENT) add("seal", [["ticket.seal", "rule.seal"]], "deny");
+    if (checks.includes("heart") && A.heart === "irregular" && !(A.med && A.med.name === A.regLatin)) add("heart", [["heart", "rule.heart"]], "deny");
+    if (checks.includes("hair") && A.target && !A.hairCard) add("hairMissing", [["rule.hair", A.role === "乗員" ? "reg.class" : "reg.issued"]], "deny");
+    if (checks.includes("hair") && A.hairCard && A.hairSample === "cut") add("hair", [["hair", "rule.hair"]], "detain");
+    if (checks.includes("xray") && A.xray) add("xray", [["xray", "rule.xray"]], "detain");
     return out;
   }
 
@@ -165,7 +221,7 @@
 
   // 2つの欄の組み合わせが欠点に当たるか
   function match(A, k1, k2) {
-    return flaws(A).find(f => (f.a === k1 && f.b === k2) || (f.a === k2 && f.b === k1)) || null;
+    return flaws(A).find(f => f.pairs.some(([a, b]) => (a === k1 && b === k2) || (a === k2 && b === k1))) || null;
   }
 
   function reply(A, type, r) {
@@ -177,10 +233,11 @@
   // その日の名もなき申請者に仕込む欠点の候補(新しい規則ほど出やすい)
   function flawPool(day) {
     const p = ["expired", "status", "permit", "genome", "height", "genome", "height"];
-    if (day >= 2) p.push("ticketName", "ticketDate", "seal", "seal", "heart", "heart");
+    p.push("faceReg");
+    if (day >= 2) p.push("cardForged", "faceReg", "ticketName", "ticketDate", "seal", "seal", "heart", "heart");
     if (day >= 3) p.push("hair", "hair", "hairMissing", "mass", "xray", "xray");
     return p;
   }
 
-  V.applicant = { create, flaws, truth, match, reply, flawPool, isTarget };
+  V.applicant = { create, flaws, truth, match, reply, flawPool, isTarget, regLook, cardLook, cardName, eyeWord };
 })();

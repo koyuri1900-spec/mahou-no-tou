@@ -29,74 +29,86 @@
     hit(px, py) { const { w, h } = this.size(); return px >= this.x && py >= this.y && px < this.x + w && py < this.y + h; }
   }
 
-  const row = (g, d, key, label, value, x, y, vx, w, color) => {
-    g.text(label, x, y, S[4]);
+  const row = (g, d, key, label, value, x, y, vx, w, color, lc) => {
+    g.text(label, x, y, lc || S[4]);
     const vw = g.text(value, vx, y, color || S[0]);
     d.field(key, x - 1, y - 1, Math.ceil(vx - x + vw) + 2, 10, label + " " + value);
   };
+  // 液晶のデータ板:机の面に浮かぶ、淡く光る枠
+  const C = V.LCD;
+  const LCD_KINDS = ["reg", "ticket", "permit", "med", "xfilm"];
+  function lcdBase(g, d, title, right) {
+    g.rect(0, 0, d.w, d.h, C.panel);
+    g.frame(0, 0, d.w, d.h, C.line);
+    g.rect(1, 1, d.w - 2, 9, C.line);
+    g.text(title, 3, 1, C.hi);
+    if (right) g.text(right, d.w - 3, 1, C.text, { align: "right" });
+  }
+  const lrow = (g, d, key, label, value, x, y, vx, color) => row(g, d, key, label, value, x, y, vx, 0, color || C.hi, C.dim);
 
   const DRAW = {
+    // IDカード(物):表に印字されているのは顔写真と頭文字つきの氏名、番号、チップだけ。中身は登録簿にある
     id(g, d) {
-      const A = d.owner;
+      const A = d.owner, U = V.applicant;
       g.rect(0, 0, d.w, d.h, S[7]);
       g.frame(0, 0, d.w, d.h, S[5]);
       g.rect(0, 0, d.w, 9, S[3]);
       g.text("ゲノムID", 3, 0, S[8]);
-      g.text(A.idNo, d.w - 3, 0, S[6], { align: "right" });
-      g.img(V.art.photo(A), 3, 11, 20, 26);
-      g.frame(2, 10, 22, 28, S[5]);
-      if (A.hand) g.text(A.hand + "手", 4, 40, S[3]);
-      d.field("id.name", 26, 10, Math.ceil(g.text(A.latin, 27, 11, S[0])) + 2, 10, "氏名 " + A.latin);
-      g.text(A.role, 27, 20, S[0]); d.field("id.class", 26, 19, V.Surface.measure(A.role) + 2, 10, "区分 " + A.role);
-      d.field("id.status", 62, 19, Math.ceil(g.text(A.status, 63, 20, S[0])) + 2, 10, "判定 " + A.status);
-      row(g, d, "id.height", "身長", `${A.predH[0]}-${A.predH[1]}cm`, 27, 29, 45, 56);
-      row(g, d, "id.expiry", "期限", A.expiry, 27, 38, 45, 60);
-      row(g, d, "id.issued", "発行", A.issued, 27, 47, 45, 60);
-      // 判定印の枠(縦)
-      for (let k = 0; k < 16; k += 2) { g.px(90 + k, 20, S[5]); g.px(90 + k, 52, S[5]); }
-      for (let k = 0; k < 32; k += 2) { g.px(90, 20 + k, S[5]); g.px(105, 20 + k, S[5]); }
-      g.text("印", 98, 11, S[5], { align: "center" });
-      // ゲノム署名(16塩基)
-      for (let k = 0; k < 16; k++) {
-        const b = A.genome[k], x = 6 + k * 6;
-        g.rect(x, 56, 5, 9, V.BASE[b]);
-        g.text(b, x + 0.5, 57, S[0]);
-      }
-      d.field("id.genome", 5, 55, 98, 11, "ゲノム署名 " + A.genome);
-      if (d.stamp) stampMark(g, d.stamp, 90, 20, 16, 33);
+      g.img(V.art.photo(A, U.cardLook(A)), 3, 12, 20, 26);
+      g.frame(2, 11, 22, 28, S[5]);
+      d.field("card.photo", 1, 10, 24, 30, "カードの顔写真");
+      const nm = U.cardName(A);
+      d.field("card.name", 26, 11, Math.ceil(g.text(nm, 27, 12, S[0])) + 2, 10, "印字 " + nm);
+      // チップと、判定で灯る小さなランプ
+      g.rect(27, 23, 13, 10, V.GOLD); g.frame(27, 23, 13, 10, S[3]);
+      g.rect(27, 27, 13, 1, S[3]); g.rect(33, 23, 1, 10, S[3]);
+      const led = { approve: S[8], limit: S[6], deny: V.RED }[d.stamp] || S[4];
+      g.rect(44, 25, 4, 4, S[2]); g.rect(45, 26, 2, 2, led);
+      if (d.stamp) g.text({ approve: "適格", limit: "限定", deny: "不適格" }[d.stamp], 50, 24, d.stamp === "deny" ? V.RED : S[2]);
+      g.text(A.idNo, 27, 33, S[4]);
+    },
+    // 登録簿(データ):カードを端末に差すと机に出る。試作版では、ここに書かれていることは正しい
+    reg(g, d) {
+      const A = d.owner, U = V.applicant, look = U.regLook(A);
+      lcdBase(g, d, "登録簿", A.idNo);
+      g.img(V.art.photo(A, look), 4, 13, 20, 26);
+      g.frame(3, 12, 22, 28, C.text);
+      d.field("reg.photo", 2, 11, 24, 30, "登録簿の顔写真");
+      if (A.hand) g.text(A.hand + "手", 4, 42, C.dim);
+      d.field("reg.name", 27, 12, Math.ceil(g.text(A.regLatin, 28, 13, C.hi)) + 2, 10, "氏名 " + A.regLatin);
+      g.text(A.role, 28, 22, C.hi); d.field("reg.class", 27, 21, V.Surface.measure(A.role) + 2, 10, "区分 " + A.role);
+      d.field("reg.status", 70, 21, Math.ceil(g.text(A.status, 71, 22, A.status === "VALID" ? C.hi : C.text)) + 2, 10, "判定 " + A.status);
+      lrow(g, d, "reg.height", "身長", `${A.predH[0]}-${A.predH[1]}cm`, 28, 31, 46);
+      g.text("瞳", 28, 40, C.dim);
+      g.rect(46, 41, 6, 6, V.IRIS[look.eyeP]); g.frame(45, 40, 8, 8, C.line);
+      g.text(U.eyeWord(look.eyeP), 56, 40, C.hi);
+      d.field("reg.eye", 27, 39, 40, 10, "瞳の色 " + U.eyeWord(look.eyeP));
+      lrow(g, d, "reg.expiry", "期限", A.expiry, 28, 49, 46);
+      lrow(g, d, "reg.issued", "発行", A.issued, 28, 58, 46);
     },
     ticket(g, d) {
       const T = d.owner.ticket;
-      g.rect(0, 0, d.w, d.h, S[6]);
-      g.rect(0, 0, 10, d.h, S[5]);
-      for (let y = 2; y < d.h; y += 4) g.rect(10, y, 1, 2, S[4]);
-      g.text("搭", 1, 6, S[1]); g.text("乗", 1, 16, S[1]); g.text("券", 1, 26, S[1]);
-      g.text(T.name, 13, 2, S[0]); d.field("ticket.name", 12, 1, d.w - 14, 10, "氏名 " + T.name);
-      row(g, d, "ticket.date", "日付", T.date, 13, 12, 30, 58);
-      row(g, d, "ticket.mass", "質量", T.mass.toFixed(1) + "kg", 13, 21, 30, 46);
-      g.text(T.cls + " " + T.flight, 13, 30, S[3]);
-      V.art.seal(g, d.w - 11, d.h - 11, T.seal);
+      lcdBase(g, d, "搭乗券", T.flight);
+      g.text(T.name, 4, 12, C.hi); d.field("ticket.name", 3, 11, d.w - 6, 10, "氏名 " + T.name);
+      lrow(g, d, "ticket.date", "日付", T.date, 4, 22, 22);
+      lrow(g, d, "ticket.mass", "質量", T.mass.toFixed(1) + "kg", 4, 31, 22);
+      g.text(T.cls, 4, 40, C.dim);
+      V.art.seal(g, d.w - 11, d.h - 11, T.seal, C.text);
       d.field("ticket.seal", d.w - 21, d.h - 21, 20, 20, "印章 " + T.seal);
     },
     permit(g, d) {
       const P = d.owner.permit;
-      g.rect(0, 0, d.w, d.h, S[7]);
-      g.frame(0, 0, d.w, d.h, S[4]);
-      g.rect(0, 0, d.w, 9, S[5]);
-      g.text("作業許可証", 3, 0, S[0]);
-      g.text(P.name, 4, 11, S[0]); d.field("permit.name", 3, 10, d.w - 6, 10, "氏名 " + P.name);
-      row(g, d, "permit.zone", "区画", P.zone, 4, 20, 22, 54);
-      row(g, d, "permit.expiry", "期限", P.expiry, 4, 29, 22, 64);
+      lcdBase(g, d, "作業許可証");
+      g.text(P.name, 4, 12, C.hi); d.field("permit.name", 3, 11, d.w - 6, 10, "氏名 " + P.name);
+      lrow(g, d, "permit.zone", "区画", P.zone, 4, 21, 22);
+      lrow(g, d, "permit.expiry", "期限", P.expiry, 4, 30, 22);
     },
     med(g, d) {
       const M = d.owner.med;
-      g.rect(0, 0, d.w, d.h, S[8]);
-      g.frame(0, 0, d.w, d.h, S[5]);
-      g.text("医療記録", 3, 1, S[2]);
-      g.rect(3, 10, d.w - 6, 1, S[5]);
-      g.text(M.name, 4, 12, S[0]); d.field("med.name", 3, 11, d.w - 6, 10, "氏名 " + M.name);
-      g.text("既往", 4, 21, S[4]);
-      const n = g.para(M.cond, 4, 30, d.w - 8, S[0], { lh: 9 });
+      lcdBase(g, d, "医療記録");
+      g.text(M.name, 4, 12, C.hi); d.field("med.name", 3, 11, d.w - 6, 10, "氏名 " + M.name);
+      g.text("既往", 4, 21, C.dim);
+      const n = g.para(M.cond, 4, 30, d.w - 8, C.hi, { lh: 9 });
       d.field("med.cond", 3, 20, d.w - 6, 11 + n * 9, "既往 " + M.cond);
     },
     envelope(g, d) {
@@ -104,13 +116,6 @@
       for (let x = 0; x < d.w / 2; x++) { g.rect(x, Math.round(x * 0.5), 1, 1, S[4]); g.rect(d.w - 1 - x, Math.round(x * 0.5), 1, 1, S[4]); }
       g.frame(0, 0, d.w, d.h, S[4]);
       g.text("忘れ物", d.w / 2, d.h - 10, S[1], { align: "center" });
-    },
-    vial(g, d) {
-      g.rect(1, 0, 6, 4, S[4]);
-      g.rect(1, 4, 6, 17, S[7]);
-      g.rect(2, 9, 4, 11, V.RED);
-      g.rect(2, 9, 1, 11, "#E8705E");
-      g.rect(1, 21, 6, 1, S[5]);
     },
     // 毛髪台紙:1倍では毛根の有無がほとんど見えない。ルーペで拡大して確かめる
     hairCard(g, d) {
@@ -126,10 +131,8 @@
       d.field("hair", 3, 13, d.w - 6, 13, "毛髪の端(ルーペで拡大)");
     },
     xfilm(g, d) {
-      g.rect(0, 0, d.w, d.h, S[0]);
-      g.frame(0, 0, d.w, d.h, S[3]);
-      g.text("X線", 3, 1, S[5]);
-      g.text((d.owner.latin.split(" ")[1] || ""), d.w - 3, 1, S[4], { align: "right" });
+      lcdBase(g, d, "X線", d.owner.latin.split(" ")[1] || "");
+      g.rect(2, 10, d.w - 4, d.h - 12, S[0]);
       const img = V.art.bustX(d.owner, 0.55);
       g.img(img, Math.round(d.w / 2 - img.width / 2), 11, img.width, Math.min(img.height, d.h - 13));
       d.field("xray", 2, 10, d.w - 4, d.h - 12, "X線写真");
@@ -156,35 +159,42 @@
         g.text("規則冊子", w / 2, 7, S[7], { align: "center" });
         return;
       }
-      const pages = rulePages(day, d.w);
-      d.page = V.clamp(d.page, 0, pages.length - 1);
+      // 見開き:左右2ページ。ページ番号と、左右の中央にめくる矢印
+      const M = 9, PW = (d.w - M * 2 - 2) / 2, pages = rulePages(day, PW);
+      d.spreads = Math.ceil(pages.length / 2);
+      d.page = V.clamp(d.page, 0, d.spreads - 1);
       g.rect(0, 0, d.w, d.h, S[1]);
-      g.rect(2, 2, d.w - 4, d.h - 14, S[7]);
-      let y = 5;
-      pages[d.page].forEach(e => {
-        const r = e.rule, fresh = r.day === day && day > 1;
-        g.rect(5, y + 3, 2, 2, fresh ? S[0] : S[4]);
-        e.lines.forEach((ln, i) => g.text(ln, 9, y + i * 9, fresh ? S[0] : S[2]));
-        d.field(r.key, 3, y - 1, d.w - 6, e.lines.length * 9 + 1 + (e.seal ? 22 : 0), r.text);
-        y += e.lines.length * 9;
-        if (e.seal) { V.art.seal(g, 20, y + 10, V.SEAL_CURRENT); g.text("現行(目盛り16)", 32, y + 6, S[3]); y += 22; }
-        y += 3;
+      [0, 1].forEach(side => {
+        const px = M + side * (PW + 2), idx = d.page * 2 + side;
+        g.rect(px, 3, PW, d.h - 6, S[7]);
+        g.rect(side ? px : px + PW - 2, 3, 2, d.h - 6, S[6]);
+        if (!pages[idx]) return;
+        let y = 6;
+        pages[idx].forEach(e => {
+          const r = e.rule, fresh = r.day === day && day > 1;
+          g.rect(px + 3, y + 3, 2, 2, fresh ? S[0] : S[4]);
+          e.lines.forEach((ln, i) => g.text(ln, px + 7, y + i * 9, fresh ? S[0] : S[2]));
+          d.field(r.key, px + 1, y - 1, PW - 2, e.lines.length * 9 + 1 + (e.seal ? 22 : 0), r.text);
+          y += e.lines.length * 9;
+          if (e.seal) { V.art.seal(g, px + 16, y + 10, V.SEAL_CURRENT); g.text("現行", px + 28, y + 6, S[3]); y += 22; }
+          y += 3;
+        });
+        g.text(String(idx + 1), px + PW / 2, d.h - 13, S[4], { align: "center" });
       });
-      // ページ送り
-      const fy = d.h - 11;
-      g.text(`${d.page + 1} / ${pages.length}`, d.w / 2, fy + 1, S[6], { align: "center" });
-      if (d.page > 0) { g.rect(3, fy, 16, 10, S[3]); g.text("◀", 11, fy + 1, S[8], { align: "center" }); d.field("tab.prev", 3, fy, 16, 10, ""); }
-      if (d.page < pages.length - 1) { g.rect(d.w - 19, fy, 16, 10, S[3]); g.text("▶", d.w - 11, fy + 1, S[8], { align: "center" }); d.field("tab.next", d.w - 19, fy, 16, 10, ""); }
+      g.rect(d.w / 2 - 1, 3, 2, d.h - 6, S[1]);
+      const my = Math.round(d.h / 2 - 8);
+      if (d.page > 0) { g.rect(1, my, 7, 16, S[5]); g.text("◀", 4.5, my + 4, S[0], { align: "center" }); d.field("tab.prev", 0, my - 6, M, 28, ""); }
+      if (d.page < d.spreads - 1) { g.rect(d.w - 8, my, 7, 16, S[5]); g.text("▶", d.w - 4.5, my + 4, S[0], { align: "center" }); d.field("tab.next", d.w - M, my - 6, M, 28, ""); }
     }
   };
 
   // 規則をページに詰める(新しい規則が先頭のページに来る)
   function rulePages(day, w) {
     const list = V.RULES.filter(r => r.day <= day).sort((a, b) => (b.day === day) - (a.day === day));
-    const pages = [[]], H = 80;
+    const pages = [[]], H = 84;
     let used = 0;
     list.forEach(r => {
-      const lines = V.Surface.wrap(r.text, w - 14), seal = r.key === "rule.seal";
+      const lines = V.Surface.wrap(r.text, w - 10), seal = r.key === "rule.seal";
       const h = lines.length * 9 + 3 + (seal ? 22 : 0);
       if (used + h > H && pages[pages.length - 1].length) { pages.push([]); used = 0; }
       pages[pages.length - 1].push({ rule: r, lines, seal });
@@ -193,36 +203,24 @@
     return pages;
   }
 
-  // 判定印(縦書き)
-  function stampMark(g, verdict, x, y, w, h) {
-    const map = { approve: ["適格", S[3]], limit: ["限定", S[3]], deny: ["不適格", V.RED] };
-    const [t, c] = map[verdict] || ["?", S[3]];
-    g.frame(x, y, w, h, c); g.frame(x + 1, y + 1, w - 2, h - 2, c);
-    const chars = [...t], y0 = y + h / 2 - chars.length * 4.5;
-    chars.forEach((ch, i) => g.text(ch, x + w / 2, y0 + i * 9, c, { align: "center" }));
-  }
-
   // 受取口の中に置くときの小さな姿
-  const MINI = { id: [26, 17], ticket: [24, 14], permit: [22, 14], med: [20, 16], envelope: [16, 10], vial: [6, 12], hairCard: [14, 10], xfilm: [14, 17] };
+  const MINI = { id: [24, 15], envelope: [16, 10], hairCard: [14, 10] };
   function mini(g, d, x, y) {
     const look = {
-      id: [26, 17, S[7], S[3]], ticket: [24, 14, S[6], S[5]], permit: [22, 14, S[7], S[5]], med: [20, 16, S[8], S[5]],
-      envelope: [16, 10, S[5], S[4]], vial: [6, 12, S[7], V.RED], hairCard: [14, 10, S[8], S[1]], xfilm: [14, 17, S[0], S[6]]
+      id: [24, 15, S[7], S[3]], envelope: [16, 10, S[5], S[4]], hairCard: [14, 10, S[8], S[1]]
     }[d.kind];
     if (!look) return { w: 0, h: 0 };
     const [w, h, bg, ac] = look;
     g.rect(x + 1, y + 1, w, h, S[0]);
     g.rect(x, y, w, h, bg);
-    if (d.kind === "vial") g.rect(x + 1, y + 4, 4, 7, ac);
-    else if (d.kind === "hairCard") g.rect(x + 2, y + 5, 10, 1, ac);
-    else if (d.kind === "xfilm") { g.frame(x, y, w, h, S[3]); g.rect(x + 5, y + 3, 4, 4, ac); g.rect(x + 6, y + 7, 2, 8, ac); }
+    if (d.kind === "hairCard") g.rect(x + 2, y + 5, 10, 1, ac);
     else g.rect(x, y, w, 3, ac);
-    if (d.kind === "id" && d.stamp) g.rect(x + 14, y + 6, 8, 5, d.stamp === "deny" ? V.RED : S[3]);
+    if (d.kind === "id") { g.rect(x + 2, y + 5, 6, 8, S[5]); g.rect(x + 10, y + 8, 4, 3, V.GOLD); if (d.stamp) g.rect(x + 16, y + 9, 2, 2, { approve: S[8], limit: S[6], deny: V.RED }[d.stamp]); }
     return { w, h };
   }
 
-  const SIZES = { id: [108, 66], ticket: [84, 46], permit: [78, 40], med: [72, 50], envelope: [46, 26], vial: [8, 22], hairCard: [44, 30], xfilm: [54, 70], rules: [120, 100], citation: [120, 80] };
-  function make(kind, owner) { const [w, h] = SIZES[kind]; return new Doc(kind, owner, w, h); }
+  const SIZES = { id: [76, 42], reg: [118, 68], ticket: [86, 50], permit: [82, 40], med: [74, 50], envelope: [46, 26], hairCard: [44, 30], xfilm: [54, 70], rules: [206, 104], citation: [120, 80] };
+  function make(kind, owner) { const [w, h] = SIZES[kind]; const d = new Doc(kind, owner, w, h); d.lcd = LCD_KINDS.includes(kind); return d; }
 
-  V.docs = { Doc, make, mini, stampMark, MINI, rulePages };
+  V.docs = { Doc, make, mini, MINI, rulePages };
 })();

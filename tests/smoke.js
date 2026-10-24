@@ -43,19 +43,20 @@ const server = http.createServer((q, r) => {
   await shot("04-applicant");
   const trayPos = kind => page.evaluate(k => { const d = V.game.scene.items.find(d => d.loc === "tray" && d.kind === k); const [w, h] = V.docs.MINI[k]; return { x: d.tx + w / 2, y: d.ty + h / 2 }; }, kind);
   const id = await trayPos("id");
-  await drag(id.x, id.y, 290, 150);
-  await drag(183, 99, 84, 150); // 採血キットを申請者へ
-  await page.waitForTimeout(1800);
-  const vial = await trayPos("vial");
-  await drag(vial.x, vial.y, 420, 110);
-  await page.waitForTimeout(1700);
-  await shot("05-analyzed");
+  await drag(id.x, id.y, 435, 205); // IDカードを判定端末へ差す
+  await page.waitForTimeout(600);
+  await shot("04b-registry");
+  await click(345, 91); // 計器の【採血】
+  await page.waitForTimeout(1900);
+  await shot("05-sampled");
   await click(447, 260); // 照合
-  const g = await page.evaluate(() => V.game.scene.fieldsAt().find(f => f.key === "id.genome"));
+  const g = await page.evaluate(() => V.game.scene.fieldsAt().find(f => f.key === "reg.genome"));
+  const sq = await page.evaluate(() => V.game.scene.fieldsAt().find(f => f.key === "seq"));
+  if (!g || !sq) errors.push("登録簿の署名か検体の欄が照合に出ない");
   await click(g.x + 10, g.y + 4);
-  await page.mouse.move(art(420, 108).x, art(420, 108).y);
+  await page.mouse.move(art(sq.x + 20, sq.y + 4).x, art(sq.x + 20, sq.y + 4).y);
   await shot("06-inspect");
-  await click(420, 108);
+  await click(sq.x + 20, sq.y + 4);
   await click(447, 260);
   // 規則冊子:つかむと開く
   const a1 = art(107, 257), a2 = art(300, 180);
@@ -64,22 +65,45 @@ const server = http.createServer((q, r) => {
   await shot("07-rules");
   const rb = await page.evaluate(() => ({ x: V.game.scene.rules.x, y: V.game.scene.rules.y }));
   await drag(rb.x + 20, rb.y + 4, 107, 257);
-  // 書類を解析機の上に落としても、解析機に重ならない位置へずれる
-  const idNow = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
-  await drag(idNow.x + 10, idNow.y + 30, 420, 110);
-  const overlap = await page.evaluate(() => { const s = V.game.scene, d = s.items.find(d => d.kind === "id"), a = V.L.analyzer, w = d.size().w, h = d.size().h; return d.x < a.x + a.w && d.x + w > a.x && d.y < a.y + a.h && d.y + h > a.y; });
-  console.log("ID overlaps analyzer:", overlap);
-  if (overlap) errors.push("ID が解析機に重なった");
-  await shot("07c-avoid");
-  // 判定(右側面の収納)
-  await click(474, 150);
+  // 登録簿を端末に重ねて置いても、はじかれずにその場に置かれ、端末は上に見えたまま
+  const regNow = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "reg"); return { x: d.x, y: d.y }; });
+  await drag(regNow.x + 10, regNow.y + 30, 340, 200);
+  const moved = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "reg"); return { x: d.x, y: d.y }; });
+  console.log("registry dropped at", JSON.stringify(moved));
+  if (moved.x !== regNow.x + (340 - (regNow.x + 10)) || moved.y !== regNow.y + (200 - (regNow.y + 30))) errors.push("登録簿が落とした場所からずれた");
+  await shot("07c-under-terminal");
+  // 机の右下へはみ出すほど置いても、一部は机に残る
+  await drag(moved.x + 5, moved.y + 5, 478, 268);
+  const edge = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "reg"); return { x: d.x, y: d.y, w: d.size().w, h: d.size().h }; });
+  console.log("registry at edge", JSON.stringify(edge));
+  if (480 - edge.x < edge.w * 0.3 || 270 - edge.y < edge.h * 0.3) errors.push("登録簿が机からほとんど消えた");
+  await shot("07d-edge");
+  await drag(edge.x + 5, edge.y + 5, 180, 140);
+  // 規則冊子のページをめくる
+  await click(107, 257);
+  const rbx = await page.evaluate(() => ({ x: V.game.scene.rules.x, y: V.game.scene.rules.y, w: V.game.scene.rules.w, h: V.game.scene.rules.h }));
+  await click(rbx.x + rbx.w - 4, rbx.y + rbx.h / 2);
+  const pg = await page.evaluate(() => ({ page: V.game.scene.rules.page, loc: V.game.scene.rules.loc, inspect: V.game.scene.inspect }));
+  console.log("rules after flip click", JSON.stringify(pg), JSON.stringify(rbx));
+  if (pg.page !== 1) {
+    errors.push("規則冊子のページがめくれない");
+  }
+  await page.waitForTimeout(40);
+  await shot("07e-flip");
   await page.waitForTimeout(400);
-  await shot("08-drawer");
-  await click(437, 127); // 適格
-  await page.waitForTimeout(300);
-  await shot("09-stamped");
-  const idDoc2 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
-  await drag(idDoc2.x + 10, idDoc2.y + 30, 84, 150);
+  await shot("07f-spread2");
+  await drag(rbx.x + rbx.w / 2, rbx.y + 3, 107, 257);
+  // 判定端末:【判定】を押すとキーがせり上がる
+  await click(435, 203);
+  await page.waitForTimeout(500);
+  await shot("08-keys");
+  await click(415, 222); // 適格
+  await page.waitForTimeout(400);
+  await shot("09-ejected");
+  const idDoc2 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y, loc: d.loc, stamp: d.stamp }; });
+  console.log("card after verdict", JSON.stringify(idDoc2));
+  if (idDoc2.loc !== "desk" || idDoc2.stamp !== "approve") errors.push("判定のあとカードが押し出されない");
+  await drag(idDoc2.x + 10, idDoc2.y + 20, 84, 150);
   await page.waitForTimeout(500);
   await shot("09b-walking");
   await page.waitForTimeout(1000);
@@ -89,12 +113,18 @@ const server = http.createServer((q, r) => {
   await click(132, 16);
   await page.waitForTimeout(2200);
   const id2 = await trayPos("id");
-  await drag(id2.x, id2.y, 290, 150);
-  await click(474, 150); await page.waitForTimeout(400); await click(437, 127); await page.waitForTimeout(300);
+  await drag(id2.x, id2.y, 435, 205);
+  await click(435, 203); await page.waitForTimeout(500); await click(415, 222); await page.waitForTimeout(300);
   const id3 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
-  await drag(id3.x + 10, id3.y + 30, 84, 150);
+  await drag(id3.x + 10, id3.y + 20, 84, 150);
   await page.waitForTimeout(1600);
   await shot("10-citation");
+  // 業務終了ボタン(2回押すと終了)
+  await page.waitForFunction(() => !V.game.scene.cur, null, { timeout: 8000 });
+  await click(201, 260); await page.waitForTimeout(200); await click(201, 260);
+  const ended = await page.evaluate(() => V.game.scene.ended);
+  console.log("ended by button:", ended);
+  if (!ended) errors.push("業務終了ボタンで終われない");
   // 時間を進めて夜へ
   await page.evaluate(() => { V.game.scene.clock = 600; });
   await page.waitForTimeout(2500);

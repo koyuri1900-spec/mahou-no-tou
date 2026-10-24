@@ -202,10 +202,29 @@
     setTimeout(() => s.out.disconnect(), 4000);
   }
 
+  // 遺伝子を聴く:A=ラ C=ド G=ソ T=シ。左に ID の署名、右に検体を鳴らす
+  const BASE_NOTE = { A: "A4", C: "C5", G: "G4", T: "B4" };
+  let genomeTimers = [];
+  function genome(left, right, onStep) {
+    if (!ensure()) return;
+    genomeTimers.forEach(clearTimeout); genomeTimers = [];
+    const t0 = ctx.currentTime + 0.05, step = 0.17;
+    const pan = (v) => { if (!ctx.createStereoPanner) return sfxBus; const p = ctx.createStereoPanner(); p.pan.value = v; p.connect(sfxBus); return p; };
+    const L = pan(-0.8), R = pan(0.8);
+    for (let i = 0; i < 16; i++) {
+      const t = t0 + i * step, a = left[i], b = right[i];
+      tone(L, t, hz(BASE_NOTE[a]), 0.3, { type: "triangle", gain: 0.12, decay: 0.12 });
+      tone(R, t, hz(BASE_NOTE[b]), 0.3, { type: "triangle", gain: 0.12, decay: 0.12 });
+      if (a !== b) tone(sfxBus, t, hz(BASE_NOTE[b]) * Math.pow(2, 1 / 12), 0.25, { type: "square", gain: 0.03, decay: 0.1, filter: 1600 });
+      genomeTimers.push(setTimeout(() => onStep && onStep(i), (t - ctx.currentTime) * 1000));
+    }
+    genomeTimers.push(setTimeout(() => onStep && onStep(-1), (t0 + 16 * step - ctx.currentTime) * 1000 + 200));
+  }
+
   function setMuted(m) {
     muted = m;
     if (master) master.gain.setTargetAtTime(m ? 0 : 0.8, ctx.currentTime, 0.05);
   }
 
-  V.audio = { ensure, sfx, startHall, stopHall, music, stopMusic, setMuted, get muted() { return muted; } };
+  V.audio = { ensure, sfx, startHall, stopHall, music, stopMusic, setMuted, genome, get muted() { return muted; } };
 })();
