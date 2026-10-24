@@ -16,7 +16,7 @@ const make = (day, id, flags = {}) => {
 };
 
 test("物語の申請者の正しい判定", () => {
-  const expect = { 1: { rina: "approve", tam: "deny", walter: "limit", kai: "detain" }, 2: { mira: "deny", plum: "approve", hallow: "approve", broker: "approve" }, 3: { nora: "approve", sol: "detain", hallow2: "approve" } };
+  const expect = { 1: { rina: "approve", tam: "deny", walter: "limit", kai: "detain" }, 2: { mira: "deny", plum: "approve", hallow: "approve" }, 3: { nora: "approve", edith: "deny", sol: "detain", hallow2: "approve" } };
   for (const day of [1, 2, 3]) for (const [id, best] of Object.entries(expect[day])) {
     assert.strictEqual(V.applicant.truth(make(day, id)).best, best, `${day}日目 ${id}`);
   }
@@ -130,4 +130,10 @@ test("カードの偽造:印字が登録簿と違えば拘束。氏名の差し�
     if (A.forged === "name") assert.ok(V.applicant.match(A, "card.name", "reg.name"));
     assert.strictEqual(V.applicant.truth(A).best, "detain");
   }
+});
+
+test("主任の頼みごとの申請者は、規則では不適格(昨日の日付の搭乗券)", () => {
+  const A = make(3, "edith");
+  assert.ok(A.favor);
+  assert.strictEqual(V.applicant.flaws(A).map(f => f.type).join(","), "ticketDate");
 });

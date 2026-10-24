@@ -5,7 +5,7 @@
   const SEC_PER_MIN = 0.6;          // 実時間 0.6秒 = ゲーム内1分(1日およそ6分)
   const VERB = { approve: "適格", limit: "限定", deny: "不適格", detain: "拘束" };
   const C = V.LCD;
-  const PHYSICAL = ["id", "envelope"];   // 物として受け渡すのは、IDカードと封筒だけ
+  const PHYSICAL = ["id"];   // 物として受け渡すのは、IDカードだけ
   const MUST_RETURN = ["id"];
   const PANEL_POS = { reg: [130, 124], ticket: [222, 124], permit: [222, 164], med: [222, 166], xfilm: [292, 124] };
   const LINKED = ["reg", "ticket"];   // IDカードに紐づくデータ:カードを端末に置くと出て、抜くと消える
@@ -107,6 +107,7 @@
       this.updateGuard(dt);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
       this.talkT += dt;
+      if (this.bossT > 0) this.bossT -= dt;
       this.items.forEach(d => { if (d.slide > 0) d.slide = Math.max(0, d.slide - dt * 3); });
       if (this.rules.flip && (this.rules.flip.t += dt) > 0.32) this.rules.flip = null;
       if (this.gene.busy > 0) this.gene.busy = Math.max(0, this.gene.busy - dt);
@@ -137,6 +138,13 @@
       this.started = true;
       V.audio.sfx.chime();
       this.say("sys", `DAY ${this.day} 業務開始。上の掲示板をクリックして呼び出す。`);
+      const B = V.BOSS[this.day];
+      if (B && B.start) this.bossLines(B.start, 0.8);
+    }
+
+    // 主任(上司)が、窓口の後ろから話しかける
+    bossLines(lines, delay = 0) {
+      lines.forEach((t, i) => this.after(delay + i * 3.2, () => { this.say("boss", t); this.bossT = 4; }));
     }
 
     // ---------- 申請者 ----------
@@ -166,7 +174,6 @@
       V.audio.sfx.click();
       // 受取口に出されるのは物(IDカード、毛髪台紙、封筒)。搭乗券などはデータで机に届く
       const give = [V.docs.make("id", A)];
-      if (A.envelope) give.push(V.docs.make("envelope", A));
       const data = ["permit", "med"].filter(k => A[k]);
       this.after(ENTER_T - 0.3, () => {
         this.placeInTray(give);
@@ -174,6 +181,9 @@
         data.forEach(k => this.showPanel(k, A));
         V.audio.sfx.paper();
         A.greet.forEach(line => this.say("them", line));
+        // 主任の頼みごと:申請者のあいさつのあと、主任が後ろから小声で頼む
+        const B = V.BOSS[this.day];
+        if (A.favor && B && B.ask) this.bossLines(B.ask, 3.4);
       });
     }
 
@@ -364,7 +374,6 @@
       d.loc = "given";
       this.flying.push({ d, x: d.x, y: d.y, t: 0 });
       V.audio.sfx.paper();
-      if (d.kind === "envelope") this.game.state.flags.envelopeReturned = true;
       this.checkLeave();
       return true;
     }
@@ -382,8 +391,6 @@
 
     finishApplicant() {
       const A = this.cur, verdict = this.verdict;
-      const env = this.items.find(d => d.kind === "envelope" && d.owner === A);
-      if (env && env.loc === "desk") { this.flags.bribe = true; this.game.state.flags.bribe = true; this.say("sys", "封筒を、引き出しにしまった。"); }
       this.items = this.items.filter(d => d.owner !== A);
       if (this.term.card && this.term.card.owner === A) this.term.card = null;
       this.term.keys = false;
@@ -403,6 +410,16 @@
     evaluate(A, verdict) {
       const t = V.applicant.truth(A);
       this.stats.processed++;
+      // 主任の頼みごと:頼みを聞いて通せば、切符は主任が処理し、終業後にチップをくれる
+      const B = V.BOSS[this.day];
+      if (A.favor && B) {
+        if (verdict === "approve") {
+          this.flags.tip = (this.flags.tip || 0) + V.BOSS.tip;
+          this.after(1.2, () => { this.say("boss", B.yes); this.bossT = 4; });
+          return;
+        }
+        if (B.no) this.after(1.2, () => { this.say("boss", B.no); this.bossT = 4; });
+      }
       if (verdict === "detain") this.stats.detained++;
       let lines = [], rule = "";
       if (!t.ok.includes(verdict)) {
@@ -778,6 +795,8 @@
       // 詰所の中のあなた
       const k = L.kiosk;
       V.art.inspector(g, k.x + 34, k.y + 9, this.t, !!A);
+      // 主任が話しているあいだは、詰所の奥に立っている
+      if (this.bossT > 0) V.art.walker(g, k.x + 14, k.y + 6, 4242, 0, 1, true);
       // 窓口の前の計量台(一段高い)
       g.rect(166, 73, 20, 3, S[4]); g.rect(166, 76, 20, 1, S[0]); g.rect(166, 73, 20, 1, S[5]);
       // 窓口に立つ申請者(ホール側):詰所の中のあなたと向き合う
@@ -845,9 +864,10 @@
       const spoken = this.talk.filter(m => m.who !== "sys");
       if (this.started && spoken.length && this.talkT < 9) {
         const m = spoken[spoken.length - 1];
-        const lines = V.Surface.wrap((m.who === "you" ? "> " : "") + m.text, w.w - 16).slice(0, 4);
-        const bh = lines.length * 9 + 4, by = w.y + 3;
-        const bg = m.who === "them" ? S[8] : m.who === "you" ? S[1] : "rgba(13,20,23,.85)", fg = m.who === "them" ? S[0] : S[7];
+        const boss = m.who === "boss";
+        const lines = V.Surface.wrap((m.who === "you" ? "> " : boss ? "主任「" : "") + m.text + (boss ? "」" : ""), w.w - 16).slice(0, 4);
+        const bh = lines.length * 9 + 4, by = boss ? w.y + w.h - bh - 4 : w.y + 3;
+        const bg = m.who === "them" ? S[8] : m.who === "you" ? S[1] : boss ? S[3] : "rgba(13,20,23,.85)", fg = m.who === "them" ? S[0] : boss ? S[8] : S[7];
         g.rect(w.x + 4, by, w.w - 8, bh, bg);
         if (m.who === "them") { g.rect(w.x + w.w / 2 - 3, by + bh, 6, 2, bg); g.rect(w.x + w.w / 2 - 1, by + bh + 2, 2, 2, bg); }
         lines.forEach((ln, i) => g.text(ln, w.x + 8, by + 2 + i * 9, fg));

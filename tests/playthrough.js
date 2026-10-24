@@ -37,6 +37,8 @@ const server = http.createServer((q, r) => {
   });
   const finish = () => page.evaluate(() => {
     const s = V.game.scene, A = s.cur, t = V.applicant.truth(A);
+    // 主任の頼みごとは聞いて通す(切符は出ず、夜にチップが入る)
+    if (A.favor) { s.decide("approve"); s.items.filter(d => d.owner === A && d.kind === "id").forEach(d => s.handBack(d)); return "approve(主任の頼み)"; }
     V.applicant.flaws(A).forEach(f => A.found.add(f.type));
     if (t.best === "detain") { A.agitated = true; s.detain(); return t.best; }
     s.decide(t.best);
@@ -78,9 +80,9 @@ const server = http.createServer((q, r) => {
         await page.waitForTimeout(1500);
         await shot("d1-kai-agitated");
       }
+      if (day === 3 && info.name.includes("ムーア")) { await page.waitForTimeout(4600); await shot("d3-boss-ask"); }
       const v = await finish();
       log.push(`DAY${day} ${info.name} 欠点[${info.flaws.join(",")}] → ${v}`);
-      if (day === 2 && info.name.includes("マロ")) await shot("d2-broker-leaving");
       await waitEmpty();
     }
     await page.evaluate(() => { V.game.scene.clock = 600; });
@@ -88,6 +90,7 @@ const server = http.createServer((q, r) => {
     await shot(`d${day}-9-night`);
     const st = await page.evaluate(() => ({ stats: V.game.scene.result.stats, credits: V.game.state.credits }));
     log.push(`DAY${day} 夜 ${JSON.stringify(st)}`);
+    if (day === 3) { const [tip, want] = await page.evaluate(() => [V.game.scene.tip, V.BOSS.tip]); if (tip !== want) errors.push("主任のチップが夜の収入に入らない"); if (st.stats.citations) errors.push("主任の頼みで通したのに切符が出た"); }
     await page.evaluate(() => { const n = V.game.scene; n.onDown(n.go.x + 1, n.go.y + 1); });
   }
   await page.waitForTimeout(6500);

@@ -53,8 +53,8 @@
   const INTRO = [
     "2089年。地表は、人が住める場所ではなくなりつつある。",
     "人類は軌道上の居住環〈エリュシオン〉へ移り住んでいる。\n移住できるのは、遺伝子が「適格」と判定された者だけだ。",
-    "赤道の島、ガイア軌道港。\nその第7ゲートは、地上に残された最後の出発ゲート。\n30日後の第12便を最後に、閉鎖される。",
-    "あなたは、このゲートの審査官だ。\n娘のアイリは8歳。心臓の病のリスクで「不適格」と判定されている。",
+    "赤道の島、ガイア軌道港。\nその第7ゲートは、地上に残された最後の出発ゲート。\n移住がいつまで続くのかは、誰も知らない。",
+    "あなたは、このゲートの審査官だ。\n娘のアイリは8歳。心臓の病を抱え、「不適格」と判定されている。",
     "DAY 0 ― 出勤"
   ];
   class Intro {
@@ -116,19 +116,26 @@
       g.text("ORBITAL DAILY", x + w / 2, y + 6, S[0], { align: "center", size: 32 });
       g.rect(x + 8, y + 26, w - 16, 1, S[0]); g.rect(x + 8, y + 28, w - 16, 1, S[0]);
       g.text(`${V.DATES[this.day]}  ガイア軌道港 港湾局発行`, x + 10, y + 31, S[3]);
-      g.text(`最終便まで ${30 - this.day}日`, x + w - 10, y + 31, S[3], { align: "right" });
+      g.text("第7ゲート版", x + w - 10, y + 31, S[3], { align: "right" });
       g.rect(x + 8, y + 41, w - 16, 1, S[4]);
       const hl = V.Surface.wrap(n.head, 260, 32);
       hl.forEach((ln, i) => g.text(ln, x + 10, y + 48 + i * 18, S[0], { size: 32 }));
       const by = y + 52 + hl.length * 18;
       let body = n.body;
       if (this.day === 2 && f.kai === "detain") body += "\n昨日、第7ゲートでは身長と遺伝子を偽った男が拘束された。";
-      if (this.day === 3 && f.bribe) body += "\n港湾局は、審査官への金品の受け渡しに警告を出した。";
       g.para(body, x + 10, by, 262, S[1], { lh: 11 });
       // 横の見出し
       const sx = x + 286;
       g.rect(sx - 6, y + 46, 1, 150, S[5]);
       n.side.forEach((s, i) => { g.rect(sx, y + 50 + i * 30, 4, 4, S[2]); g.para(s, sx + 8, y + 48 + i * 30, 130, S[1]); });
+      // 論説(人々を煽る記事を書き続ける記者の署名記事)
+      if (n.column) {
+        const cy = y + 112;
+        g.rect(sx, cy, 138, 1, S[0]);
+        g.text("論説", sx, cy + 3, S[0]);
+        const k = g.para(n.column, sx, cy + 15, 138, S[2], { lh: 11 });
+        g.text("― C・ノード", sx + 138, cy + 17 + k * 11, S[4], { align: "right" });
+      }
       // 本日の規則
       const ry = y + 150;
       g.rect(x + 8, ry, 270, 1, S[0]);
@@ -149,13 +156,13 @@
     constructor(game, result) {
       this.game = game; this.result = result; this.mouse = { x: 0, y: 0 }; this.t = 0;
       this.day = game.state.day;
-      this.bribeNew = !!result.flags.bribe;
+      this.tip = result.flags.tip || 0;
       // 借金はできない。払える分だけ、優先度の高い費用から自動で払う
       this.pay = {}; let left = this.available();
       ["rent", "meds", "food", "power"].forEach(k => { const e = V.EXPENSES.find(e => e.key === k); this.pay[k] = e.cost <= left; if (this.pay[k]) left -= e.cost; });
       this.go = { x: 340, y: 240, w: 110, h: 18 };
     }
-    income() { return this.result.stats.earned + (this.bribeNew ? 40 : 0); }
+    income() { return this.result.stats.earned + this.tip; }
     available() { return Math.max(0, this.game.state.credits + this.income()); }
     total() { return V.EXPENSES.reduce((s, e) => s + (this.pay[e.key] ? e.cost : 0), 0); }
     rows() { return V.EXPENSES.map((e, i) => ({ e, x: 30, y: 128 + i * 14, w: 200, h: 12 })); }
@@ -168,7 +175,7 @@
       g.rect(24, 40, 210, 1, S[3]);
       g.text("今日の業務", 26, 46, S[7]);
       const lines = [["処理した人数", s.processed], ["正しい判定", s.correct], ["違反通知", s.citations], ["給与と罰金", (s.earned >= 0 ? "+" : "") + s.earned]];
-      if (this.bribeNew) lines.push(["封筒", "+40"]);
+      if (this.tip) lines.push(["主任から", "+" + this.tip]);
       lines.forEach(([k, v], i) => { g.text(k, 30, 60 + i * 11, S[6]); g.text(String(v), 230, 60 + i * 11, S[8], { align: "right" }); });
       // 家計
       g.text("家計", 26, 114, S[7]);
@@ -244,8 +251,8 @@
       g.rect(0, 0, 480, 270, S[0]);
       const st = this.game.state;
       if (this.stage === 0) {
-        g.text("第12便(最終便)乗員名簿", 240, 30, S[8], { align: "center", size: 32 });
-        g.text(`出発予定 ${V.FINAL_FLIGHT}`, 240, 56, S[5], { align: "center" });
+        g.text("第12便 乗員名簿", 240, 30, S[8], { align: "center", size: 32 });
+        g.text("出発予定 未定", 240, 56, S[5], { align: "center" });
         V.MANIFEST.forEach(([role, name], i) => {
           const y = 80 + i * 18, show = this.t > 0.6 + i * 0.5;
           if (!show) return;
@@ -261,8 +268,8 @@
         g.text("— アイリ", 330, 90, S[4]);
         g.text("試作版はここまで", 240, 130, S[7], { align: "center", size: 32 });
         g.text(`処理 ${st.stats.processed}人  正しい判定 ${st.stats.correct}  違反 ${st.stats.citations}  所持 ₡${st.credits}`, 240, 166, S[5], { align: "center" });
-        g.text("本編では、ハロウは最終日まで何度もこの窓口を通る。", 240, 186, S[4], { align: "center" });
-        g.text("そして最終日、当局は臨時の生体検査を行う。", 240, 198, S[4], { align: "center" });
+        g.text("本編では、主任の頼みごとが少しずつ増え、ハロウは毎朝この窓口を通る。", 240, 186, S[4], { align: "center" });
+        g.text("そして新聞の記事が、地上と上の溝を深めていく。", 240, 198, S[4], { align: "center" });
         btn(g, this.back, "タイトルへ", inRect(this.mouse.x, this.mouse.y, this.back), true);
       }
     }

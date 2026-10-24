@@ -70,7 +70,7 @@
       fresh: spec.fresh || 0,
       hand: spec.hand || null,
       look,
-      ticket: null, permit: null, med: null, envelope: !!spec.envelope,
+      ticket: null, permit: null, med: null, favor: !!spec.favor,
       heart: spec.heart || "normal",
       massActual: 0,
       xray: spec.xray || null,
