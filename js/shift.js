@@ -27,7 +27,9 @@
   const inRect = (x, y, r) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
   const ruleText = key => (V.RULES.find(r => r.key === key) || {}).text || "";
   const massOff = A => !!(A.ticket && Math.abs(A.massActual - A.ticket.mass) > 0.5);
-  const ENTER_T = 1.6, LEAVE_T = 1.4, AWAY_T = 2.6;
+  const ENTER_T = 1.6, LEAVE_T = 1.4, AWAY_T = 3.4;
+  // X線:カーテンが閉まる → 撮影中の灯 → 光の帯が上から下へ走る → カーテンが開く
+  const XR = { close: 0.6, scan0: 0.9, scan1: 2.3, open: 2.8 };
 
   // 欠点ごとの具体的な説明(違反切符に書く)
   function detail(A, f) {
@@ -215,19 +217,21 @@
         });
       } else if (kind === "xray") {
         if (A.xrayTaken) { this.note("X線写真はもう届いています。"); return; }
-        this.say("you", "X線室で撮影を。この票を持って。");
-        this.say("them", "わかりました。行ってきます。");
+        this.say("you", "X線を撮ります。カーテンを閉めるので、そのまま動かないで。");
         this.phase = "away"; this.phaseT = 0;
+        V.audio.sfx.drawer();
+        this.after(XR.scan0, () => V.audio.sfx.xray());
+        this.after(XR.open, () => V.audio.sfx.drawer());
       }
     }
     returnFromXray() {
       const A = this.cur;
-      this.phase = "entering"; this.phaseT = 0;
+      this.phase = "present"; this.phaseT = 0;
       if (!A) return;
       A.xrayTaken = true;
       this.showPanel("xfilm", A);
-      this.say("them", "撮ってきました。");
-      V.audio.sfx.paper();
+      this.say("them", "…終わりましたか。");
+      V.audio.sfx.machine();
     }
 
     decide(verdict) {
@@ -764,7 +768,7 @@
       g.rect(166, 73, 20, 3, S[4]); g.rect(166, 76, 20, 1, S[0]); g.rect(166, 73, 20, 1, S[5]);
       // 窓口に立つ申請者(ホール側):詰所の中のあなたと向き合う
       const escorting = this.guard.state === "grab" || this.guard.state === "escort";
-      if (A && !escorting && (this.phase === "present" || this.phase === "entering" || this.phase === "detained" || this.phase === "leaving")) {
+      if (A && !escorting && (this.phase === "present" || this.phase === "entering" || this.phase === "detained" || this.phase === "leaving" || this.phase === "away")) {
         // (ホールの人々は影で描くが、窓口で向き合っている人だけは色で描く)
         let ax = 170, ay = 55, fr = 0, dir = -1;
         if (this.phase === "entering") { const k2 = this.phaseT / ENTER_T; ax = Math.round(190 - Math.min(1, k2 * 1.8) * 20); ay = k2 > 0.65 ? 55 : 58; fr = k2 < 0.56 ? Math.floor(this.t * 8) : 0; }
@@ -785,7 +789,7 @@
       const A = this.cur, w = L.win;
       const ctx = g.ctx; ctx.save(); ctx.beginPath(); ctx.rect(w.x * 2, w.y * 2, w.w * 2, w.h * 2); ctx.clip();
       for (let cm = 140; cm <= 200; cm += 10) g.text(String(cm), w.x + 10, Math.round(V.cmToY(cm)) - 9, S[5]);
-      if (A && this.phase !== "away") {
+      if (A) {
         // 正面を向いていないあいだは黒い影。入ってくる → 台に上がる → こちらを向く/背を向ける → 台を降りる → 去る
         let dx = 0, dy = 0, sil = 0, bob = 0;
         const walkBob = () => Math.round(Math.abs(Math.sin(this.t * 9)) * 3);
@@ -820,17 +824,10 @@
           g.rect(gx, w.y + 34, 40, 100, S[0]); g.rect(gx + 10, w.y + 12, 22, 24, S[0]); g.rect(gx + 6, w.y + 8, 30, 7, S[1]); g.rect(gx + 6, w.y + 14, 30, 2, S[1]);
           g.rect(gx - 18, w.y + 70, 22, 7, S[0]);
         }
-      } else if (A && this.phase === "away") {
-        // 背を向けて X線室へ向かい、しばらくして戻ってくる
-        const t = this.phaseT;
-        if (t < 0.9) {
-          if (!A._sil) A._sil = V.art.silhouette(A._bust);
-          const bx = Math.round(w.x + w.w / 2 - A._sil.width / 2) - Math.round((t / 0.9) * 160), by = Math.round(V.cmToY(A.actualH)) + 7 - Math.round(Math.abs(Math.sin(this.t * 9)) * 3);
-          g.img(A._sil, bx, by);
-        }
       } else if (!this.started) {
         this.drawBriefing(g);
       }
+      if (A && this.phase === "away") this.drawXrayCurtain(g, A);
       for (let k = 0; k < 34; k++) g.rect(w.x + 124 + k, w.y + 6 + k * 3, 1, 3, "rgba(211,218,220,.08)");
       // 吹き出し(最新の発言)
       const spoken = this.talk.filter(m => m.who !== "sys");
@@ -852,6 +849,42 @@
         const tw = V.Surface.measure(txt) + 6;
         g.rect(w.x + 2, top - 5, tw, 10, S[0]); g.frame(w.x + 2, top - 5, tw, 10, S[6]);
         g.text(txt, w.x + 5, top - 4, S[8]);
+      }
+    }
+
+    // X線の撮影:窓のカーテンが左から閉まり、撮影中の灯がともる。光の帯が上から下へ走り、
+    // 布ごしに骨の影が一瞬だけ透ける。撮り終えるとカーテンが開く
+    drawXrayCurtain(g, A) {
+      const w = L.win, t = this.phaseT;
+      const k = t < XR.close ? t / XR.close : t < XR.open ? 1 : Math.max(0, 1 - (t - XR.open) / (AWAY_T - XR.open));
+      const ease = 1 - Math.pow(1 - k, 2), cw = Math.round(w.w * ease);
+      if (cw <= 0) return;
+      // 布(ひだの陰影)
+      for (let x = 0; x < cw; x++) {
+        const f = Math.sin((x + (1 - ease) * 40) / 4.2);
+        g.rect(w.x + x, w.y + 4, 1, w.h - 4, f > 0.55 ? S[4] : f < -0.55 ? S[2] : S[3]);
+      }
+      g.rect(w.x + cw - 1, w.y + 4, 1, w.h - 4, S[1]);
+      g.rect(w.x + cw - 3, w.y + w.h - 6, 3, 6, S[2]);
+      // レールと吊り輪
+      g.rect(w.x, w.y, w.w, 3, S[1]); g.rect(w.x, w.y + 2, w.w, 1, S[5]);
+      for (let x = 2; x < cw; x += Math.max(6, Math.round(cw / 14))) g.rect(w.x + x, w.y + 1, 2, 4, S[6]);
+      if (k < 1) return;
+      // 撮影中の灯
+      const on = t >= XR.close + 0.15 && t < XR.open, lx = w.x + w.w / 2 - 22, ly = w.y + w.h - 18;
+      g.rect(lx, ly, 44, 11, S[0]); g.frame(lx, ly, 44, 11, on ? S[7] : S[3]);
+      if (on) g.rect(lx - 2, ly - 2, 48, 15, "rgba(236,239,238,.10)");
+      g.text("撮影中", lx + 22, ly + 1.5, on ? S[8] : S[3], { align: "center" });
+      // 光の帯と、布ごしに透ける骨
+      if (t >= XR.scan0 && t < XR.scan1) {
+        const p = (t - XR.scan0) / (XR.scan1 - XR.scan0), top = w.y + 22, bot = w.y + w.h, y = Math.round(top + (bot - top) * p);
+        if (!A._xray) A._xray = V.art.bustX(A);
+        const img = A._xray, bx = Math.round(w.x + w.w / 2 - img.width / 2), by = Math.round(V.cmToY(A.actualH)) - 1;
+        const band = 14, ctx = g.ctx;
+        ctx.save(); ctx.beginPath(); ctx.rect(w.x * 2, (y - band) * 2, w.w * 2, band * 2); ctx.clip();
+        ctx.globalAlpha = 0.35; g.img(img, bx, by); ctx.restore();
+        g.rect(w.x, y - band, w.w, band, "rgba(236,239,238,.06)");
+        g.rect(w.x, y - 1, w.w, 2, "rgba(236,239,238,.55)");
       }
     }
 
