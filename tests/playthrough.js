@@ -28,9 +28,10 @@ const server = http.createServer((q, r) => {
   // 現在の申請者を「正しく」処理する(書類を並べ、検体を取り、欠点を指摘し、正しい判定を下す)
   const setup = () => page.evaluate(() => {
     const s = V.game.scene, A = s.cur;
-    const pos = { id: [200, 92], ticket: [200, 162], permit: [292, 162], med: [292, 92], envelope: [300, 214], hairCard: [312, 214] };
+    const pos = { envelope: [300, 214], hairCard: [312, 214] };
     s.items.filter(d => d.owner === A && pos[d.kind]).forEach(d => { d.loc = "desk"; [d.x, d.y] = pos[d.kind]; d.dirty = true; });
-    if (A.target) { s.analyzer = { seq: A.sample, fresh: A.fresh, busy: 0, owner: A }; A.sampled = true; }
+    s.insertCard(s.items.find(d => d.kind === "id" && d.owner === A));
+    if (A.target) { s.gene = { seq: A.sample, fresh: A.fresh, busy: 0, owner: A, play: -1 }; A.sampled = true; }
     if (A.ticket && Math.abs(A.massActual - A.ticket.mass) > 0.5) A.xrayTaken = true;
     return { name: A.name, best: V.applicant.truth(A).best, flaws: V.applicant.flaws(A).map(f => f.type) };
   });
@@ -39,11 +40,12 @@ const server = http.createServer((q, r) => {
     V.applicant.flaws(A).forEach(f => A.found.add(f.type));
     if (t.best === "detain") { A.agitated = true; s.detain(); return t.best; }
     s.decide(t.best);
-    s.items.filter(d => d.owner === A && ["id", "ticket", "permit", "med"].includes(d.kind)).forEach(d => s.handBack(d));
+    s.items.filter(d => d.owner === A && d.kind === "id").forEach(d => s.handBack(d));
     return t.best;
   });
   const waitEmpty = () => page.waitForFunction(() => !V.game.scene.cur, null, { timeout: 8000 });
   const call = async () => { await page.evaluate(() => V.game.scene.callNext()); await page.waitForFunction(() => V.game.scene.phase === "present" && V.game.scene.items.some(d => d.kind === "id"), null, { timeout: 5000 }); };
+  const waitReg = () => page.waitForFunction(() => V.game.scene.items.some(d => d.kind === "reg" && d.owner === V.game.scene.cur), null, { timeout: 3000 });
 
   // タイトル → 導入を飛ばして新聞へ
   await page.evaluate(() => { V.game.state = { day: 1, credits: 40, airi: 3, flags: {}, stats: { processed: 0, correct: 0, citations: 0 } }; V.game.toNews(); });
@@ -58,19 +60,20 @@ const server = http.createServer((q, r) => {
     for (let i = 0; i < n; i++) {
       await call();
       const info = await setup();
+      await waitReg();
       if (day === 2 && info.name.includes("プラム")) {
         await page.evaluate(() => { V.game.scene.rules.loc = "desk"; V.game.scene.rules.x = 316; V.game.scene.rules.y = 114; V.game.scene.rules.page = 1; V.game.scene.rules.dirty = true; });
         await shot("d2-plum");
         await page.evaluate(() => { const s = V.game.scene; s.rules.loc = "slot"; s.rules.x = 172; s.rules.y = 230; s.rules.dirty = true; });
       }
       if (day === 3 && info.name.includes("アデイェミ")) {
-        await page.evaluate(() => { const s = V.game.scene; s.cur.xrayTaken = false; s.requestSample("kitXray"); });
+        await page.evaluate(() => { const s = V.game.scene; s.cur.xrayTaken = false; s.requestSample("xray"); });
         await page.waitForFunction(() => V.game.scene.phase === "present", null, { timeout: 8000 });
-        await page.evaluate(() => { const s = V.game.scene, f = s.items.find(d => d.kind === "xfilm"); f.loc = "desk"; f.x = 404; f.y = 182; f.dirty = true; const h = s.items.find(d => d.kind === "hairCard"); s.loupe.loc = "desk"; s.loupe.x = h.x + 20; s.loupe.y = h.y + 4; });
+        await page.evaluate(() => { const s = V.game.scene, h = s.items.find(d => d.kind === "hairCard"); s.loupe.loc = "desk"; s.loupe.x = h.x + 20; s.loupe.y = h.y + 4; });
         await shot("d3-sol-xray");
       }
       if (day === 1 && info.name.includes("ヴェルナー")) {
-        await page.evaluate(() => { const s = V.game.scene, id = s.fieldsAt().find(f => f.key === "id.genome"); s.inspect = true; s.sel = id; s.mouse = { x: 420, y: 108 }; });
+        await page.evaluate(() => { const s = V.game.scene, id = s.fieldsAt().find(f => f.key === "reg.genome"); s.inspect = true; s.sel = id; s.mouse = { x: 340, y: 112 }; });
         await shot("d1-kai-inspect");
         await page.evaluate(() => { const s = V.game.scene; s.pickField(s.fieldsAt().find(f => f.key === "seq")); s.closeInspect(); });
         await page.waitForTimeout(1500);

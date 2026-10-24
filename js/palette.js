@@ -8,6 +8,8 @@ V.RED = "#D1432F";
 V.RED_DARK = "#7E2A20";
 V.IRIS = { B: "#7A5A3C", G: "#5BAA6E", b: "#4F86D6" };
 V.GOLD = "#DDB040";
+// 液晶の机:灰色の世界の中で、淡く光る青灰色
+V.LCD = { base: "#152227", panel: "#1C2C32", line: "#34505A", dim: "#5E8189", text: "#9FC3C9", hi: "#D6ECEF", glow: "rgba(159,195,201,.14)" };
 
 V.BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 V.bayer = (x, y) => V.BAYER[(y & 3) * 4 + (x & 3)] / 16;

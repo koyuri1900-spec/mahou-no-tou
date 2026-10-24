@@ -11,20 +11,19 @@
     kiosk: { x: 96, y: 36, w: 72, h: 44 },
     booth: { x: 0, y: 84, w: 168, h: 186 },
     win: { x: 4, y: 86, w: 160, h: 128 },
-    heart: { x: 126, y: 198, w: 36, h: 14 },
-    scale: { x: 6, y: 198, w: 40, h: 14 },
     tray: { x: 4, y: 216, w: 160, h: 28 },
     clock: { x: 4, y: 247, w: 82, h: 21 },
     bookSlot: { x: 90, y: 247, w: 34, h: 21 },
     citeBox: { x: 128, y: 247, w: 36, h: 21 },
     desk: { x: 168, y: 84, w: 312, h: 186 },
-    kitBlood: { x: 172, y: 88, w: 22, h: 22 },
-    kitXray: { x: 172, y: 114, w: 22, h: 22 },
-    alarm: { x: 250, y: 88, w: 72, h: 26 },
-    analyzer: { x: 374, y: 88, w: 102, h: 56 },
-    loupeCase: { x: 374, y: 148, w: 44, h: 26 },
-    drawerTab: { x: 468, y: 118, w: 12, h: 70 },
-    drawer: { x: 394, y: 104, w: 86, h: 144 },
+    // 机の上端に据え付けた計器の帯(身体・遺伝子・記録)
+    gauge: { x: 170, y: 86, w: 308, h: 42 },
+    gBody: { x: 170, y: 86, w: 96, h: 42 },
+    gGene: { x: 268, y: 86, w: 130, h: 42 },
+    gRec: { x: 400, y: 86, w: 78, h: 42 },
+    alarm: { x: 316, y: 132, w: 74, h: 22 },
+    loupeCase: { x: 432, y: 132, w: 44, h: 24 },
+    terminal: { x: 392, y: 162, w: 86, h: 88 },
     inspect: { x: 418, y: 252, w: 58, h: 16 },
     endBtn: { x: 172, y: 252, w: 58, h: 16 }
   };
@@ -108,9 +107,12 @@
     [L.clock, L.bookSlot, L.citeBox].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
 
     // 机(右下)
-    const d = L.desk;
-    g.rect(d.x, d.y + 1, d.w, d.h, S[2]);
-    g.dither(d.x, d.y + 1, d.w, d.h, S[3], 0.07);
+    // 机(右下):机の面そのものが液晶。淡い格子が光っている
+    const d = L.desk, C = V.LCD;
+    g.rect(d.x, d.y + 1, d.w, d.h, C.base);
+    for (let x = d.x + 6; x < d.x + d.w; x += 12) g.rect(x, d.y + 1, 1, d.h, "rgba(159,195,201,.035)");
+    for (let y = d.y + 7; y < d.y + d.h; y += 12) g.rect(d.x, y, d.w, 1, "rgba(159,195,201,.035)");
+    g.rect(d.x, d.y + 1, d.w, 1, C.line);
     g.rect(d.x, d.y + 1, 1, d.h, S[0]);
     return g.canvas;
   }
@@ -201,8 +203,10 @@
   }
 
   // ID用の小さな顔写真(24×30)
-  function photo(A) {
-    const big = bust(A, {}, 0.75), cx = Math.round(geom(A, 0.75).cx);
+  // look を渡すと、その見た目で撮った写真になる(登録簿やカードの写真)
+  function photo(A, look) {
+    const B = look ? Object.assign({}, A, { look }) : A;
+    const big = bust(B, {}, 0.75), cx = Math.round(geom(B, 0.75).cx);
     const g = V.gfx.art(20, 26);
     g.rect(0, 0, 20, 26, S[5]);
     g.ctx.drawImage(big, cx - 10, 0, 20, 26, 0, 2, 20, 26);
@@ -276,15 +280,16 @@
   }
 
   // 封蝋のような印章(搭乗券、規則冊子で使う)
-  function seal(g, x, y, ver) {
-    const r = 9;
+  // col を渡すと、その色で描く(液晶の上では光る線で)
+  function seal(g, x, y, ver, col) {
+    const r = 9, c = col || S[3];
     for (let a = 0; a < 64; a++) {
       const th = (a / 64) * Math.PI * 2;
-      g.px(Math.round(x + Math.cos(th) * r), Math.round(y + Math.sin(th) * r), S[3]);
-      if (a % (ver === V.SEAL_CURRENT ? 4 : 5) === 0) g.px(Math.round(x + Math.cos(th) * (r - 2)), Math.round(y + Math.sin(th) * (r - 2)), S[3]);
+      g.px(Math.round(x + Math.cos(th) * r), Math.round(y + Math.sin(th) * r), c);
+      if (a % (ver === V.SEAL_CURRENT ? 4 : 5) === 0) g.px(Math.round(x + Math.cos(th) * (r - 2)), Math.round(y + Math.sin(th) * (r - 2)), c);
     }
-    g.text(ver, x, y - 4, S[2], { align: "center" });
+    g.text(ver, x, y - 4, col || S[2], { align: "center" });
   }
 
-  V.art = { background, bust, bustX, photo, queuePerson, seal, walker, guard, inspector, silhouette };
+  V.art = { background, bust, bustX, photo, geom, queuePerson, seal, walker, guard, inspector, silhouette };
 })();
