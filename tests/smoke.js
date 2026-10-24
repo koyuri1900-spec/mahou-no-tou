@@ -43,7 +43,7 @@ const server = http.createServer((q, r) => {
   await shot("04-applicant");
   const trayPos = kind => page.evaluate(k => { const d = V.game.scene.items.find(d => d.loc === "tray" && d.kind === k); const [w, h] = V.docs.MINI[k]; return { x: d.tx + w / 2, y: d.ty + h / 2 }; }, kind);
   const id = await trayPos("id");
-  await drag(id.x, id.y, 405, 222); // IDカードを判定端末の読み取り台へ置く
+  await drag(id.x, id.y, 415, 229); // IDカードを判定端末の読み取り台へ置く
   await page.waitForTimeout(600);
   await shot("04b-registry");
   await click(319, 90); // 計器の【採血】
@@ -78,7 +78,7 @@ const server = http.createServer((q, r) => {
   console.log("registry at edge", JSON.stringify(edge));
   if (480 - edge.x < edge.w * 0.3 || 270 - edge.y < edge.h * 0.3) errors.push("登録簿が机からほとんど消えた");
   await shot("07d-edge");
-  await drag(edge.x + 5, edge.y + 5, 140, 130);
+  await drag(edge.x + 3, edge.y, 140, 130);
   // 規則冊子のページをめくる
   await click(107, 257);
   const rbx = await page.evaluate(() => ({ x: V.game.scene.rules.x, y: V.game.scene.rules.y, w: V.game.scene.rules.w, h: V.game.scene.rules.h }));
@@ -94,10 +94,10 @@ const server = http.createServer((q, r) => {
   await shot("07f-spread2");
   await drag(rbx.x + rbx.w / 2, rbx.y + rbx.h - 2, 107, 257);
   // 判定端末:【判定】を押すとキーがせり上がる
-  await click(462, 203);
+  await click(461, 210);
   await page.waitForTimeout(500);
   await shot("08-keys");
-  await click(462, 217); // 適格
+  await click(461, 223); // 適格
   await page.waitForTimeout(400);
   await shot("09-ejected");
   const idDoc2 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y, loc: d.loc, stamp: d.stamp }; });
@@ -113,8 +113,8 @@ const server = http.createServer((q, r) => {
   await click(132, 16);
   await page.waitForTimeout(2200);
   const id2 = await trayPos("id");
-  await drag(id2.x, id2.y, 405, 222);
-  await click(462, 203); await page.waitForTimeout(500); await click(462, 217); await page.waitForTimeout(300);
+  await drag(id2.x, id2.y, 415, 229);
+  await click(461, 210); await page.waitForTimeout(500); await click(461, 223); await page.waitForTimeout(300);
   const id3 = await page.evaluate(() => { const d = V.game.scene.items.find(d => d.kind === "id"); return { x: d.x, y: d.y }; });
   await drag(id3.x + 10, id3.y + 20, 84, 150);
   await page.waitForTimeout(1600);

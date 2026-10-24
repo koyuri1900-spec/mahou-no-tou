@@ -5,26 +5,26 @@
   const SEC_PER_MIN = 0.6;          // 実時間 0.6秒 = ゲーム内1分(1日およそ6分)
   const VERB = { approve: "適格", limit: "限定", deny: "不適格", detain: "拘束" };
   const C = V.LCD;
-  const PHYSICAL = ["id", "hairCard", "envelope"];   // 物として受け渡すのは、IDカード・毛髪台紙・封筒だけ
+  const PHYSICAL = ["id", "envelope"];   // 物として受け渡すのは、IDカードと封筒だけ
   const MUST_RETURN = ["id"];
-  const PANEL_POS = { reg: [130, 124], ticket: [252, 124], permit: [252, 176], med: [252, 176], xfilm: [134, 194] };
+  const PANEL_POS = { reg: [130, 124], ticket: [222, 124], permit: [222, 164], med: [222, 166], xfilm: [292, 124] };
   const LINKED = ["reg", "ticket"];   // IDカードに紐づくデータ:カードを端末に置くと出て、抜くと消える
   const BRIEF = { x: 8, y: 92, w: 354, h: 118 };
   const FLAW_TEXT = {
     expired: "IDの期限切れ", status: "INVALID の判定", permit: "作業許可証の不備", genome: "検体と署名の不一致",
     height: "予測身長との不一致", ticketName: "搭乗券の名義違い", ticketDate: "搭乗券の日付違い", seal: "旧版の印章",
-    heart: "記録のない心拍の乱れ", hair: "毛根のない毛髪", hairMissing: "毛髪台紙の未提出", xray: "X線写真の不審物",
+    heart: "記録のない心拍の乱れ", xray: "X線に写った偽装の器具", implant: "記録のない心臓の機器",
     faceReg: "登録簿の顔と本人の不一致", cardForged: "カードの印字の偽造"
   };
   const FLAW_RULE = {
     expired: "rule.expiry", status: "rule.status", permit: "rule.staff", genome: "rule.genome", height: "rule.height",
-    ticketName: "rule.ticket", ticketDate: "rule.ticket", seal: "rule.seal", heart: "rule.heart", hair: "rule.hair", hairMissing: "rule.hair", xray: "rule.xray",
+    ticketName: "rule.ticket", ticketDate: "rule.ticket", seal: "rule.seal", heart: "rule.heart", xray: "rule.xray", implant: "rule.xray",
     faceReg: "rule.face", cardForged: "rule.card"
   };
   const NEW_TOOLS = {
     1: ["掲示板(上)をクリックして呼び出す", "判定端末 ― IDカードを置くと登録簿と搭乗券が出る", "計器 ― 身長と遺伝子(【採血】)、記録", "規則冊子(窓口の下)・【照合】(右下)"],
     2: ["搭乗券 ― IDカードに紐づいて出る。医療記録はデータで届く", "心拍(計器の身体の欄)", "IDカードの印字と登録簿の照合"],
-    3: ["毛髪台紙とルーペ(机の右の収納)", "体重(計器)と【X線】― 写真がデータで届く"]
+    3: ["体重(計器)", "【X線】(計器)― カーテンを閉めて撮影し、全身の写真がデータで届く"]
   };
   const inRect = (x, y, r) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
   const ruleText = key => (V.RULES.find(r => r.key === key) || {}).text || "";
@@ -48,9 +48,8 @@
       case "ticketDate": return `搭乗券の日付 ${T.date} が本日 ${today} ではなかった。`;
       case "seal": return `搭乗券の印章が旧版の ${T.seal} だった。`;
       case "heart": return "心拍に乱れがあり、医療記録がなかった。";
-      case "hair": return "毛髪台紙の毛に毛根がなかった(切った毛)。";
-      case "hairMissing": return `採血の対象者(${A.role === "乗員" ? "乗員" : "ID発行 " + A.issued})なのに、毛髪台紙がなかった。`;
-      case "xray": return "X線写真に、衣服の下の不審物が写っていた。";
+      case "implant": return "X線に心臓の機器が写っていたのに、医療記録がなかった。";
+      case "xray": return A.xray === "bolts" ? "X線に、すねの骨の延長ボルトが写っていた(身長の偽装)。" : "X線に、前腕の血液パッドと指先への管が写っていた(他人の血で採血をごまかす偽装)。";
     }
     return FLAW_TEXT[f.type] || "";
   }
@@ -88,7 +87,6 @@
       rules.loc = "slot"; rules.x = L.bookSlot.x; rules.y = L.bookSlot.y;
       this.rules = rules;
       this.items.push(rules);
-      this.loupe = this.day >= 3 ? { kind: "loupe", w: 30, h: 36, x: L.loupeCase.x + 7, y: L.loupeCase.y - 5, loc: "case" } : null;
       this.startBtn = { x: BRIEF.x + BRIEF.w - 92, y: BRIEF.y + BRIEF.h - 24, w: 80, h: 16 };
       V.audio.startHall();
     }
@@ -168,7 +166,6 @@
       V.audio.sfx.click();
       // 受取口に出されるのは物(IDカード、毛髪台紙、封筒)。搭乗券などはデータで机に届く
       const give = [V.docs.make("id", A)];
-      if (A.hairCard) give.push(V.docs.make("hairCard", A));
       if (A.envelope) give.push(V.docs.make("envelope", A));
       const data = ["permit", "med"].filter(k => A[k]);
       this.after(ENTER_T - 0.3, () => {
@@ -435,7 +432,7 @@
       this.stats.mistakes.push(lines[0]);
       const c = V.docs.make("citation", null);
       c.cite = { n: this.stats.citations, time: this.clockText(), who: A.latin, verdict: VERB[verdict], lines, rule, fine };
-      c.h = 46 + lines.reduce((s, l) => s + V.Surface.wrap(l, c.w - 6).length * 9, 0) + (rule ? V.Surface.wrap("規則:" + rule, c.w - 6).length * 9 : 0);
+      c.h = 31 + lines.reduce((s, l) => s + V.Surface.wrap(l, c.w - 4, 12).length * 7, 0) + (rule ? V.Surface.wrap("規則:" + rule, c.w - 4, 12).length * 7 : 0);
       // 印字機から、机の上端へ押し出される
       c.loc = "desk"; c.x = 170; c.y = L.gauge.y + L.gauge.h + 2; c.slide = 1; c.front();
       this.items.push(c);
@@ -505,9 +502,10 @@
       return out;
     }
     fieldAt(x, y) {
-      const fs = this.fieldsAt();
-      for (let i = fs.length - 1; i >= 0; i--) if (inRect(x, y, fs[i])) return fs[i];
-      return null;
+      // 重なっているときは、いちばん小さい欄を選ぶ
+      let best = null;
+      this.fieldsAt().forEach(f => { if (inRect(x, y, f) && (!best || f.w * f.h <= best.w * best.h)) best = f; });
+      return best;
     }
     pickField(f) {
       if (!this.sel) { this.sel = f; V.audio.sfx.click(); return; }
@@ -590,12 +588,6 @@
         if (f) this.pickField(f); else this.sel = null;
         return;
       }
-      // ルーペ
-      if (this.loupe && this.loupe.loc !== "hand" && inRect(x, y, this.loupe)) {
-        const lp = this.loupe; lp.from = lp.loc; lp.loc = "hand";
-        this.drag = { item: lp, dx: x - lp.x, dy: y - lp.y, from: lp.from, ox: lp.x, oy: lp.y };
-        V.audio.sfx.click(); return;
-      }
       if (this.onDevice(x, y)) return;
       // 受取口:縮んだ姿の、つかんだ位置がそのまま書類のつかんだ位置になる
       const t = this.trayHit(x, y);
@@ -630,10 +622,6 @@
       const dg = this.drag; if (!dg) return;
       this.drag = null;
       const it = dg.item, A = this.cur;
-      if (it.kind === "loupe") {
-        if (inRect(x, y, L.loupeCase)) { it.loc = "case"; it.x = L.loupeCase.x + 7; it.y = L.loupeCase.y - 6; V.audio.sfx.drop(); return; }
-        it.loc = "desk"; it.x = V.clamp(it.x, L.desk.x, 480 - it.w); it.y = V.clamp(it.y, L.desk.y - 10, 270 - it.h); return;
-      }
       // 規則冊子をクリックしただけなら、机の空いた場所に開く
       if (it.kind === "rules" && dg.from === "slot" && Math.hypot(x - dg.sx, y - dg.sy) < 3) { it.loc = "desk"; it.x = 140; it.y = 126; it.dirty = true; V.audio.sfx.paper(); return; }
       if (it.kind === "citation" && inRect(x, y, L.citeBox)) { this.items = this.items.filter(d => d !== it); V.audio.sfx.drop(); return; }
@@ -668,7 +656,6 @@
     // 机に据え付けた装置。常に書類より上に描き、その上のクリックは装置のものとして扱う
     deviceRects() {
       const list = [L.gauge, L.terminal];
-      if (this.loupe) list.push(L.loupeCase);
       if (this.alarmShown()) list.push(L.alarm);
       return list;
     }
@@ -695,14 +682,14 @@
 
     // ---------- 判定端末と計器の部品 ----------
     // 読み取り台(左)に寝かせたカードと、右の細い列:【判定】と、その下の収納からせり上がるキー
-    cardRect() { const t = L.terminal; return { x: t.x + 3, y: t.y + 6, w: 76, h: 42 }; }
-    judgeBtn() { const t = L.terminal; return { x: t.x + 82, y: t.y + 2, w: t.w - 84, h: 11 }; }
+    cardRect() { const t = L.terminal; return { x: t.x + 3, y: t.y + 10, w: 56, h: 32 }; }
+    judgeBtn() { const t = L.terminal; return { x: t.x + 63, y: t.y + 2, w: t.w - 65, h: 10 }; }
     keyRects() {
-      const t = L.terminal, k = this.term.keysK, x = t.x + 83, w = t.w - 86, rise = (h, y) => ({ y: Math.round(y + (1 - k) * h), h });
+      const t = L.terminal, k = this.term.keysK, x = t.x + 64, w = t.w - 67, rise = (h, y) => ({ y: Math.round(y + (1 - k) * h), h });
       return [
-        { v: "approve", x, w, ...rise(11, t.y + 16) },
-        { v: "deny", x, w, ...rise(11, t.y + 28) },
-        { v: "limit", x, w, ...rise(9, t.y + 43) }
+        { v: "approve", x, w, ...rise(9, t.y + 15) },
+        { v: "deny", x, w, ...rise(9, t.y + 25) },
+        { v: "limit", x, w, ...rise(7, t.y + 37) }
       ];
     }
     gaugeBtns() {
@@ -748,16 +735,13 @@
       this.items.filter(d => d.loc === "desk" || d.loc === "slot").sort((a, b) => a.z - b.z).forEach(d => this.drawDoc(g, d));
       this.drawGauges(g);
       this.drawTerminal(g);
-      this.drawLoupeCase(g);
       this.drawFlying(g);
       this.drawAlarm(g);
-      if (this.loupe && this.loupe.loc !== "hand") this.drawLoupe(g, this.loupe);
       button(g, L.inspect, "照合  F", this.started, this.inspect);
       if (!this.started) this.drawBriefing(g);
       if (this.drag) {
         const it = this.drag.item;
-        if (it.kind === "loupe") this.drawLoupe(g, it);
-        else this.drawDoc(g, it, true);
+        this.drawDoc(g, it, true);
         this.drawDropTargets(g, it);
       }
       if (this.inspect) this.drawInspect(g);
@@ -908,8 +892,10 @@
       // 光の帯と、布ごしに透ける骨
       if (t >= XR.scan0 && t < XR.scan1) {
         const p = (t - XR.scan0) / (XR.scan1 - XR.scan0), top = w.y + 22, bot = w.y + w.h, y = Math.round(top + (bot - top) * p);
-        if (!A._xray) A._xray = V.art.bustX(A);
-        const img = A._xray, bx = Math.round(w.x + w.w / 2 - img.width / 2), by = Math.round(V.cmToY(A.actualH)) - 1;
+        // 窓の上半身と頭の大きさがそろう倍率で、全身のX線像を重ねる
+        const k = V.BUST_K;
+        if (!A._xray) A._xray = V.art.xrayBody(A, 210 * k);
+        const img = A._xray, bx = Math.round(w.x + w.w / 2 - img.width / 2), by = Math.round(V.cmToY(A.actualH)) - 1 - Math.round(0.6 * k);
         const band = 14, ctx = g.ctx;
         ctx.save(); ctx.beginPath(); ctx.rect(w.x * 2, (y - band) * 2, w.w * 2, band * 2); ctx.clip();
         ctx.globalAlpha = 0.35; g.img(img, bx, by); ctx.restore();
@@ -958,7 +944,6 @@
     // 引きずっている物を落とせる場所を示す
     drawDropTargets(g, it) {
       const A = this.cur, glow = (r, label) => { g.frame(r.x, r.y, r.w, r.h, S[7]); if (label) { const w = V.Surface.measure(label) + 8; g.rect(r.x + r.w / 2 - w / 2, r.y + r.h - 13, w, 11, S[7]); g.text(label, r.x + r.w / 2, r.y + r.h - 12, S[0], { align: "center" }); } };
-      if (it.kind === "loupe") { glow(L.loupeCase); return; }
       if (it.owner && it.owner === A && this.phase === "present" && PHYSICAL.includes(it.kind) && (!MUST_RETURN.includes(it.kind) || this.verdict)) glow(L.win, "手渡して返す");
       if (it.kind === "id" && !it.stamp) glow(L.terminal, "置く");
       if (it.kind === "rules") glow(L.bookSlot);
@@ -1049,24 +1034,24 @@
       g.rect(t.x, t.y, t.w, t.h, S[2]); g.frame(t.x, t.y, t.w, t.h, S[4]);
       const c = this.cardRect();
       g.rect(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.base); g.frame(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.line);
-      g.text("判定端末", t.x + 3, t.y, S[5], { size: 12 });
+      g.text("判定端末", t.x + 3, t.y + 1, S[5], { size: 12 });
       if (card) {
         const img = card.render(this.day);
         g.imgSame(img, c.x, c.y);
         if (!this.inspect && inRect(this.mouse.x, this.mouse.y, c)) g.frame(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.hi);
-      } else g.text("IDカードを置く", c.x + c.w / 2, c.y + 17, C.dim, { align: "center", size: 12 });
+      } else g.text("IDカードを置く", c.x + c.w / 2, c.y + 13, C.dim, { align: "center", size: 12 });
       // 【判定】ボタン
       const jb = this.judgeBtn(), can = !!(card && A && card.owner === A && this.phase === "present" && !this.verdict), hov = can && inRect(this.mouse.x, this.mouse.y, jb);
       g.rect(jb.x, jb.y + 1, jb.w, jb.h, S[0]);
       g.rect(jb.x, jb.y + (hov ? 1 : 0), jb.w, jb.h, this.term.keys ? S[7] : can ? S[5] : S[3]);
-      g.text("判定", jb.x + jb.w / 2, jb.y + 1.5 + (hov ? 1 : 0), this.term.keys || can ? S[0] : S[4], { align: "center" });
+      g.text("判定", jb.x + jb.w / 2, jb.y + 2 + (hov ? 1 : 0), this.term.keys || can ? S[0] : S[4], { align: "center", size: 12 });
       // キーの収納:ふだんは閉じている
-      const bay = { x: jb.x, y: t.y + 15, w: jb.w, h: t.h - 17 };
+      const bay = { x: jb.x, y: t.y + 14, w: jb.w, h: t.h - 16 };
       g.rect(bay.x, bay.y, bay.w, bay.h, S[0]);
       const k = this.term.keysK;
       if (k < 0.05) { for (let y = bay.y + 3; y < bay.y + bay.h; y += 4) g.rect(bay.x + 2, y, bay.w - 4, 1, S[1]); return; }
       const ctx = g.ctx; ctx.save(); ctx.beginPath(); ctx.rect(bay.x * 2, bay.y * 2, bay.w * 2, bay.h * 2); ctx.clip();
-      g.rect(bay.x, t.y + 41, bay.w, 1, S[3]);
+      g.rect(bay.x, t.y + 35, bay.w, 1, S[3]);
       const style = { approve: ["適格", S[8], S[0]], deny: ["不適格", V.RED, S[8]], limit: ["限定", S[5], S[0]] };
       this.keyRects().forEach(r => {
         const [label, col, tc] = style[r.v], hv = k > 0.9 && inRect(this.mouse.x, this.mouse.y, r);
@@ -1078,40 +1063,12 @@
       ctx.restore();
     }
 
-    drawLoupeCase(g) {
-      if (!this.loupe) return;
-      const lc = L.loupeCase;
-      g.rect(lc.x + 1, lc.y + 1, lc.w, lc.h, S[0]); g.rect(lc.x, lc.y, lc.w, lc.h, S[1]); g.frame(lc.x, lc.y, lc.w, lc.h, S[3]);
-      if (this.loupe.loc !== "case") g.text("ルーペ", lc.x + lc.w / 2, lc.y + 8, S[4], { align: "center" });
-    }
-
     drawAlarm(g) {
       if (!this.alarmShown()) return;
       const a = L.alarm, on = Math.floor(this.t * 4) % 2 === 0, hov = inRect(this.mouse.x, this.mouse.y, a);
       g.rect(a.x + 1, a.y + 2, a.w, a.h, S[0]);
       g.rect(a.x, a.y + (hov ? 1 : 0), a.w, a.h, on ? V.RED : V.RED_DARK);
       g.text("警備を呼ぶ(拘束)", a.x + a.w / 2, a.y + 7 + (hov ? 1 : 0), S[8], { align: "center", size: 12 });
-    }
-
-    // ルーペ:レンズの下にあるものを3倍に拡大して見せる
-    drawLoupe(g, lp) {
-      const cx = lp.x + 15, cy = lp.y + 15, r = 13, ctx = g.ctx;
-      if (lp.loc !== "case") {
-        const src = r / 3;
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2, 0, Math.PI * 2); ctx.clip();
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(g.canvas, (cx - src) * 2, (cy - src) * 2, src * 4, src * 4, (cx - r) * 2, (cy - r) * 2, r * 4, r * 4);
-        ctx.restore();
-      }
-      ctx.save();
-      ctx.lineWidth = 4; ctx.strokeStyle = S[0];
-      ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2 + 1, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 2; ctx.strokeStyle = S[5];
-      ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2 + 1, 0, Math.PI * 2); ctx.stroke();
-      if (lp.loc === "case") { ctx.fillStyle = "rgba(163,176,181,.35)"; ctx.fill(); }
-      ctx.restore();
-      g.rect(cx + 9, cy + 9, 3, 3, S[5]); g.rect(cx + 11, cy + 11, 4, 4, S[1]); g.rect(cx + 13, cy + 13, 4, 6, S[1]);
     }
 
     drawDoc(g, d, held) {
@@ -1150,37 +1107,33 @@
       const sctx = snap.getContext("2d");
       sctx.clearRect(0, 0, snap.width, snap.height); sctx.drawImage(g.canvas, 0, 0);
       const restore = (r, pad) => { const x = (r.x - pad) * 2, y = (r.y - pad) * 2, w = (r.w + pad * 2) * 2, h = (r.h + pad * 2) * 2; ctx.drawImage(snap, x, y, w, h, x, y, w, h); };
-      g.rect(0, 0, 480, 270, "rgba(5,9,11,.68)");
-      // 欄を含む書類や装置は、少しだけ暗くして読めるように残す
+      g.rect(0, 0, 480, 270, "rgba(5,9,11,.74)");
+      // 欄を含む書類や装置は、暗めに残して位置がわかるようにする
       const boxes = [...new Set(fs.map(f => f.box).filter(Boolean))];
-      boxes.forEach(b => { restore(b, 0); g.rect(b.x, b.y, b.w, b.h, "rgba(5,9,11,.42)"); });
-      fs.forEach(f => restore(f, 1));
+      boxes.forEach(b => { restore(b, 0); g.rect(b.x, b.y, b.w, b.h, "rgba(5,9,11,.55)"); });
+      // 欄そのものは元の明るさで戻す。枠は描かず、左に小さな印だけ付ける(行が詰まっていても重ならない)
+      fs.forEach(f => restore(f, 0));
       // 照合ボタンは明るいまま
       button(g, L.inspect, "照合  F", true, true);
       const hov = this.fieldAt(this.mouse.x, this.mouse.y);
-      fs.forEach(f => corners(g, f, f === hov ? S[8] : S[5]));
+      fs.forEach(f => { if (f !== hov && !(this.sel && this.sel.key === f.key && this.sel.x === f.x)) g.rect(f.x - 2, f.y + Math.floor(f.h / 2) - 1, 1, 2, S[6]); });
+      const lit = (r, strong) => { g.rect(r.x, r.y, r.w, r.h, strong ? "rgba(236,239,238,.22)" : "rgba(236,239,238,.14)"); g.frame(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[8]); };
+      if (hov) { if (hov.box) g.frame(hov.box.x - 1, hov.box.y - 1, hov.box.w + 2, hov.box.h + 2, S[4]); lit(hov); }
       if (this.sel) {
         const r = this.sel;
-        g.frame(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[8]); g.frame(r.x - 2, r.y - 2, r.w + 4, r.h + 4, S[8]);
+        lit(r, true); g.frame(r.x - 2, r.y - 2, r.w + 4, r.h + 4, S[6]);
         const x0 = r.x + r.w / 2, y0 = r.y + r.h / 2, x1 = this.mouse.x, y1 = this.mouse.y, n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 3));
         for (let i = 0; i <= n; i++) if (i % 2 === 0) g.rect(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), 1, 1, S[8]);
       }
       const tip = hov || this.sel;
       if (tip && tip.label) {
         const t = (this.sel && hov && hov.key !== this.sel.key ? shortLabel(this.sel) + " ⇔ " : "") + tip.label;
-        const w = Math.min(300, V.Surface.measure(t) + 10), x = V.clamp(this.mouse.x + 8, 2, 478 - w), y = V.clamp(this.mouse.y + 12, 14, 254);
-        g.rect(x, y, w, 12, S[8]); g.text(t, x + 5, y + 2, S[0]);
+        const w = Math.min(300, V.Surface.measure(t, 12) + 8), x = V.clamp(this.mouse.x + 8, 2, 478 - w), y = V.clamp(this.mouse.y + 10, 14, 258);
+        g.rect(x, y, w, 9, S[8]); g.text(t, x + 4, y + 1.5, S[0], { size: 12 });
       }
     }
   }
 
-  function corners(g, f, c) {
-    const x0 = f.x - 2, y0 = f.y - 2, x1 = f.x + f.w + 1, y1 = f.y + f.h + 1, l = 3;
-    g.rect(x0, y0, l, 1, c); g.rect(x0, y0, 1, l, c);
-    g.rect(x1 - l + 1, y0, l, 1, c); g.rect(x1, y0, 1, l, c);
-    g.rect(x0, y1, l, 1, c); g.rect(x0, y1 - l + 1, 1, l, c);
-    g.rect(x1 - l + 1, y1, l, 1, c); g.rect(x1, y1 - l + 1, 1, l, c);
-  }
   function button(g, r, label, enabled, lit) {
     g.rect(r.x + 1, r.y + 1, r.w, r.h, S[0]);
     g.rect(r.x, r.y, r.w, r.h, lit ? S[7] : enabled ? S[4] : S[2]);
