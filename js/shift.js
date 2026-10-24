@@ -217,7 +217,9 @@
         });
       } else if (kind === "xray") {
         if (A.xrayTaken) { this.note("X線写真はもう届いています。"); return; }
-        this.say("you", "X線を撮ります。カーテンを閉めるので、そのまま動かないで。");
+        // 声をかけるかどうかは、そのときどき(黙ってカーテンを引くこともある)
+        const ask = pick(V.LINES.xrayAsk);
+        if (ask) this.say("you", ask);
         this.phase = "away"; this.phaseT = 0;
         V.audio.sfx.drawer();
         this.after(XR.scan0, () => V.audio.sfx.xray());
@@ -230,7 +232,8 @@
       if (!A) return;
       A.xrayTaken = true;
       this.showPanel("xfilm", A);
-      this.say("them", "…終わりましたか。");
+      const done = A.replies.xrayDone !== undefined ? A.replies.xrayDone : pick(V.LINES.xrayDone);
+      if (done) this.say("them", done);
       V.audio.sfx.machine();
     }
 
@@ -860,15 +863,17 @@
       const ease = 1 - Math.pow(1 - k, 2), cw = Math.round(w.w * ease);
       if (cw <= 0) return;
       // 布(ひだの陰影)
+      // 右端から引き出す。ひだは右端に固定され、閉じるほど広がる
+      const x0 = w.x + w.w - cw;
       for (let x = 0; x < cw; x++) {
         const f = Math.sin((x + (1 - ease) * 40) / 4.2);
-        g.rect(w.x + x, w.y + 4, 1, w.h - 4, f > 0.55 ? S[4] : f < -0.55 ? S[2] : S[3]);
+        g.rect(w.x + w.w - 1 - x, w.y + 4, 1, w.h - 4, f > 0.55 ? S[4] : f < -0.55 ? S[2] : S[3]);
       }
-      g.rect(w.x + cw - 1, w.y + 4, 1, w.h - 4, S[1]);
-      g.rect(w.x + cw - 3, w.y + w.h - 6, 3, 6, S[2]);
+      g.rect(x0, w.y + 4, 1, w.h - 4, S[1]);
+      g.rect(x0, w.y + w.h - 6, 3, 6, S[2]);
       // レールと吊り輪
       g.rect(w.x, w.y, w.w, 3, S[1]); g.rect(w.x, w.y + 2, w.w, 1, S[5]);
-      for (let x = 2; x < cw; x += Math.max(6, Math.round(cw / 14))) g.rect(w.x + x, w.y + 1, 2, 4, S[6]);
+      for (let x = 2; x < cw; x += Math.max(6, Math.round(cw / 14))) g.rect(w.x + w.w - 2 - x, w.y + 1, 2, 4, S[6]);
       if (k < 1) return;
       // 撮影中の灯
       const on = t >= XR.close + 0.15 && t < XR.open, lx = w.x + w.w / 2 - 22, ly = w.y + w.h - 18;
