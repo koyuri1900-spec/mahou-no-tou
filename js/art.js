@@ -9,23 +9,23 @@
     hall: { x: 0, y: 0, w: 480, h: 84 },
     board: { x: 96, y: 13, w: 72, h: 20 },
     kiosk: { x: 96, y: 36, w: 72, h: 44 },
-    booth: { x: 0, y: 84, w: 168, h: 186 },
-    win: { x: 4, y: 86, w: 160, h: 128 },
-    tray: { x: 4, y: 216, w: 160, h: 28 },
-    clock: { x: 4, y: 247, w: 82, h: 21 },
-    bookSlot: { x: 90, y: 247, w: 34, h: 21 },
-    citeBox: { x: 128, y: 247, w: 36, h: 21 },
-    desk: { x: 168, y: 84, w: 312, h: 186 },
+    // 窓口(左)は狭く、机(右)を広く
+    booth: { x: 0, y: 84, w: 126, h: 186 },
+    win: { x: 4, y: 86, w: 118, h: 128 },
+    tray: { x: 4, y: 216, w: 118, h: 28 },
+    clock: { x: 4, y: 247, w: 80, h: 21 },
+    bookSlot: { x: 88, y: 247, w: 34, h: 21 },
+    desk: { x: 126, y: 84, w: 354, h: 186 },
     // 机の上端に据え付けた計器の帯(身体・遺伝子・記録)
-    gauge: { x: 170, y: 86, w: 308, h: 42 },
-    gBody: { x: 170, y: 86, w: 96, h: 42 },
-    gGene: { x: 268, y: 86, w: 130, h: 42 },
-    gRec: { x: 400, y: 86, w: 78, h: 42 },
-    alarm: { x: 316, y: 132, w: 74, h: 22 },
-    loupeCase: { x: 432, y: 132, w: 44, h: 24 },
-    terminal: { x: 392, y: 162, w: 86, h: 88 },
-    inspect: { x: 418, y: 252, w: 58, h: 16 },
-    endBtn: { x: 172, y: 252, w: 58, h: 16 }
+    gauge: { x: 128, y: 86, w: 350, h: 34 },
+    gBody: { x: 128, y: 86, w: 104, h: 34 },
+    gGene: { x: 234, y: 86, w: 140, h: 34 },
+    gRec: { x: 376, y: 86, w: 102, h: 34 },
+    alarm: { x: 282, y: 124, w: 80, h: 18 },
+    // 判定端末:カードを寝かせて置く読み取り台と、右の細いキーの列
+    terminal: { x: 384, y: 204, w: 94, h: 46 },
+    citeBox: { x: 130, y: 250, w: 44, h: 18 },
+    inspect: { x: 418, y: 252, w: 58, h: 16 }
   };
 
   // 身長の壁:205cm が窓の上端近く、140cm が窓の中ほど。頭頂の高さで身長を読む。
@@ -33,7 +33,7 @@
   const CM_PX = 1.1;
   V.cmToY = cm => V.L.win.y + 10 + (205 - cm) * CM_PX;
   V.CM_PX = CM_PX;
-  V.BUST_K = 2.2;
+  V.BUST_K = 1.75;
 
   // ---- 背景(1日ごとに作り直す。ロケットの組み上がりが変わる)----
   function background(day) {
@@ -84,7 +84,7 @@
     g.rect(bd.x + 34, bd.y + bd.h, 4, k.y - bd.y - bd.h, S[1]);
 
     // 窓口(左下)
-    g.rect(0, 85, 168, 185, S[1]);
+    g.rect(0, 85, L.booth.w, 185, S[1]);
     const w = L.win;
     g.rect(w.x - 2, w.y - 2, w.w + 4, w.h + 4, S[0]);
     g.rect(w.x, w.y, w.w, w.h, S[3]);
@@ -104,7 +104,7 @@
     g.rect(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[0]);
     g.dither(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[2], 0.35);
     g.rect(L.tray.x, L.tray.y, L.tray.w, 2, S[3]);
-    [L.clock, L.bookSlot, L.citeBox].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
+    [L.clock, L.bookSlot].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
 
     // 机(右下)
     // 机(右下):机の面そのものが液晶。淡い格子が光っている
@@ -183,33 +183,104 @@
     return g.canvas;
   }
 
-  // X線像
-  function bustX(A, k = V.BUST_K) {
-    const { W, H, cx, rx, ry, cy } = geom(A, k);
+  // ---- X線写真(全身)----
+  // 高さ H の全身像。比率は身長100単位(u)で決める。骨は灰、体内の金属は真っ白に写る。
+  // A.xray:pad=前腕の血液パッドと指先への管 / bolts=すねの延長ボルト / device=胸の心臓の機器 / plate=前腕の手術の金属板(無害)
+  function xrayBody(A, H) {
+    H = Math.round(H);
+    const W = Math.round(H * 0.5), u = H / 100, cx = W / 2;
     const g = V.gfx.art(W, H);
-    const P = (x, y, c, w = 1, h = 1) => g.rect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), c);
-    for (let y = Math.round(30 * k); y < H; y += 2) { const t = Math.min(1, (y - 30 * k) / (12 * k)), hw = (7 + t * 21) * k; g.rect(Math.round(cx - hw), y, Math.round(hw * 2), 1, S[2]); }
-    for (let y = 0; y < 30 * k; y++) for (let x = 0; x < W; x++) {
-      const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry, d = dx * dx + dy * dy;
-      if (d <= 1 && d > 0.72) g.rect(x, y, 1, 1, S[7]);
+    const big = H > 160;
+    // 線分からの距離が r 以内の画素を塗る(dith<1 なら網点で薄く)
+    function cap(x0, y0, x1, y1, r, col, dith = 1) {
+      const minX = Math.floor(Math.min(x0, x1) - r), maxX = Math.ceil(Math.max(x0, x1) + r);
+      const minY = Math.floor(Math.min(y0, y1) - r), maxY = Math.ceil(Math.max(y0, y1) + r);
+      const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1;
+      for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+        const t = V.clamp(((x + 0.5 - x0) * dx + (y + 0.5 - y0) * dy) / L2, 0, 1);
+        const ex = x + 0.5 - (x0 + dx * t), ey = y + 0.5 - (y0 + dy * t);
+        if (ex * ex + ey * ey <= r * r && (dith >= 1 || V.bayer(x, y) < dith)) g.rect(x, y, 1, 1, col);
+      }
     }
-    P(cx - 6 * k, cy, S[5], 4 * k, 3 * k); P(cx + 2 * k, cy, S[5], 4 * k, 3 * k); P(cx - 4 * k, cy + 9 * k, S[6], 8 * k, 2 * k);
-    for (let y = 26 * k; y < H; y += 3 * k) P(cx - k, y, S[7], 3 * k, 2 * k);
-    P(cx - 18 * k, 36 * k, S[7], 14 * k, 2 * k); P(cx + 4 * k, 36 * k, S[7], 14 * k, 2 * k);
-    for (let j = 0; j < 7; j++) { const y = (44 + j * 8) * k, w = (15 - Math.abs(j - 3)) * k; P(cx - 2 * k - w, y, S[6], w, k); P(cx + 3 * k, y, S[6], w, k); }
-    P(cx - 26 * k, 40 * k, S[6], 3 * k, 40 * k); P(cx + 23 * k, 40 * k, S[6], 3 * k, 40 * k);
-    if (A.xray === "pouch") { P(cx - 21 * k, 37 * k, S[8], 9 * k, 11 * k); P(cx - 20 * k, 38 * k, S[7], 7 * k, 9 * k); P(cx - 17 * k, 48 * k, S[8], 2 * k, 4 * k); }
+    function oval(x0, y0, rx, ry, col, ring, dith = 1) {
+      for (let y = Math.floor(y0 - ry); y <= y0 + ry; y++) for (let x = Math.floor(x0 - rx); x <= x0 + rx; x++) {
+        const d = ((x + 0.5 - x0) / rx) ** 2 + ((y + 0.5 - y0) / ry) ** 2;
+        if (d <= 1 && (!ring || d >= ring) && (dith >= 1 || V.bayer(x, y) < dith)) g.rect(x, y, 1, 1, col);
+      }
+    }
+    // 骨:外側(皮質)を明るく、内側を少し暗く。大きく描くときだけ二層にする
+    const bone = (x0, y0, x1, y1, r) => { cap(x0 * u + cx, y0 * u, x1 * u + cx, y1 * u, Math.max(0.6, r * u), S[6]); if (big && r * u > 1.6) cap(x0 * u + cx, y0 * u, x1 * u + cx, y1 * u, r * u - 1.2, S[5]); };
+    const metal = (x0, y0, x1, y1, r) => cap(x0 * u + cx, y0 * u, x1 * u + cx, y1 * u, Math.max(0.6, r * u), S[8]);
+    const sides = fn => { fn(1); fn(-1); };
+    g.rect(0, 0, W, H, S[0]);
+    // 軟部組織(体の輪郭):薄い網点
+    oval(cx, 7.5 * u, 6.4 * u, 7.6 * u, S[2], 0, 0.7);
+    cap(cx, 14 * u, cx, 18 * u, 3 * u, S[2], 0.7);
+    for (let y = 18; y < 58; y++) { const t = (y - 18) / 40, hw = (y < 24 ? 8 + (y - 18) * 0.7 : 12.2 - t * 3.5) * u; cap(cx - hw, y * u, cx + hw, y * u, 0.6 * u, S[2], 0.75); }
+    sides(s => { cap(cx + s * 11.5 * u, 20 * u, cx + s * 13 * u, 50 * u, 2.4 * u, S[2], 0.7); cap(cx + s * 13 * u, 50 * u, cx + s * 13.8 * u, 57 * u, 1.6 * u, S[2], 0.7); });
+    sides(s => { cap(cx + s * 5 * u, 57 * u, cx + s * 4.2 * u, 78 * u, 3.6 * u, S[2], 0.7); cap(cx + s * 4.2 * u, 78 * u, cx + s * 4 * u, 96 * u, 2.4 * u, S[2], 0.7); cap(cx + s * 4 * u, 97 * u, cx + s * 5.5 * u, 99 * u, 1.4 * u, S[2], 0.7); });
+    // 頭蓋骨
+    oval(cx, 7 * u, 5.2 * u, 6.4 * u, S[3], 0, 0.55);
+    oval(cx, 7 * u, 5.2 * u, 6.4 * u, S[6], 0.72);
+    sides(s => oval(cx + s * 2.1 * u, 7.6 * u, 1.4 * u, 1.2 * u, S[1]));
+    oval(cx, 9.6 * u, 0.6 * u, 1 * u, S[1]);
+    for (let x = -2.4; x <= 2.4; x += big ? 0.8 : 1.2) cap(cx + x * u, 11.5 * u, cx + x * u, 12.3 * u, Math.max(0.4, 0.3 * u), S[7]);
+    for (let k = 0; k <= 16; k++) { const a = Math.PI * (k / 16); cap(cx - Math.cos(a) * 4.4 * u, 10 * u + Math.sin(a) * 4 * u, cx - Math.cos(a + Math.PI / 16) * 4.4 * u, 10 * u + Math.sin(a + Math.PI / 16) * 4 * u, Math.max(0.5, 0.6 * u), S[6]); }
+    // 背骨(椎骨を1つずつ)
+    for (let y = 14.5; y < 55; y += 1.9) { const w = y < 19 ? 1 : y < 40 ? 1.3 : 1.7; cap(cx - w * u, y * u, cx + w * u, y * u, Math.max(0.5, 0.65 * u), S[6]); }
+    // 鎖骨・肩甲骨・胸骨
+    sides(s => { bone(s * 1.2, 19.2, s * 10.5, 18.2, 0.55); bone(s * 7, 20.5, s * 9.5, 27, 0.9); });
+    bone(0, 20.2, 0, 31, 0.6);
+    // 肋骨:背骨から外へ、弧を描いて下がる
+    const nr = big ? 10 : 7, gap = big ? 1.9 : 2.6;
+    for (let i = 0; i < nr; i++) {
+      const j = i * 10 / nr, y0 = 20.5 + i * gap, w = 6.5 + Math.min(j, 5) * 0.75 - Math.max(0, j - 6) * 0.9;
+      sides(s => { let px = 0, py = y0; for (let k = 1; k <= 10; k++) { const t = k / 10, x = w * Math.sin(t * 1.7) / Math.sin(1.7), y = y0 + 3.2 * t * t; bone(s * (1.4 + px), py, s * (1.4 + x), y, big ? 0.42 : 0.3); px = x; py = y; } });
+    }
+    // 骨盤と仙骨
+    sides(s => { oval(cx + s * 5.2 * u, 53 * u, 4.2 * u, 3.6 * u, S[6], 0.6); bone(s * 2.4, 56.5, s * 4.8, 58.5, 0.7); oval(cx + s * 4.6 * u, 57.6 * u, 1.3 * u, 1.3 * u, S[5]); });
+    oval(cx, 54.5 * u, 1.8 * u, 2.6 * u, S[5], 0, 0.8);
+    sides(s => bone(s * 4.2, 58.8, s * 0.6, 60.2, 0.55));
+    // 腕:上腕骨、前腕の2本、手の骨
+    sides(s => {
+      oval(cx + s * 11.3 * u, 19.6 * u, 1.4 * u, 1.4 * u, S[6]);
+      bone(s * 11.4, 20, s * 12.4, 35.5, 0.95);
+      bone(s * 12.2, 36.5, s * 12.8, 49.5, 0.55); bone(s * 13.3, 36.5, s * 14, 49.5, 0.55);
+      for (let f = 0; f < 4; f++) bone(s * (12.6 + f * 0.55), 50.5, s * (12.5 + f * 0.75), 56.5 + (f === 1 || f === 2 ? 0.8 : 0), 0.28);
+      bone(s * 12.4, 50.5, s * 11.2, 54, 0.3);
+    });
+    // 脚:大腿骨、膝のお皿、すねの2本、足
+    sides(s => {
+      oval(cx + s * 4.6 * u, 57.6 * u, 1.1 * u, 1.1 * u, S[7]);
+      bone(s * 5, 58.5, s * 4.3, 77, 1.15);
+      oval(cx + s * 4.2 * u, 78.2 * u, 1.1 * u, 0.9 * u, S[6]);
+      bone(s * 4, 79.5, s * 3.9, 95.5, 0.85); bone(s * 5.3, 80, s * 5.4, 95, 0.4);
+      bone(s * 3.8, 96.5, s * 6.2, 98.6, 0.6);
+    });
+    // 体内の物
+    const kind = A.xray;
+    if (kind === "pad") { // 前腕の内側に血液の袋、細い管が人差し指の先へ
+      metal(12.2, 40, 12.2, 45, 0.9); cap((12.2 * u) + cx, 45 * u, (12.6 * u) + cx, 57.2 * u, Math.max(0.4, 0.22 * u), S[8]);
+      oval(cx + 12.6 * u, 57.3 * u, Math.max(1, 0.6 * u), Math.max(1, 0.6 * u), S[8]);
+    } else if (kind === "bolts") { // すねの骨に沿った金属の棒と、ねじの頭
+      sides(s => { metal(s * 4.6, 80.5, s * 4.6, 93.5, 0.3); [81.5, 87, 92.5].forEach(y => metal(s * 3.2, y, s * 6, y, 0.25)); });
+    } else if (kind === "device") { // 左胸の機器と、心臓へのびる導線
+      metal(-6.2, 21.5, -3.6, 23.4, 0.9);
+      let px = -4, py = 23; for (let k = 1; k <= 8; k++) { const t = k / 8, x = -4 + 4.6 * t, y = 23 + 7 * t + Math.sin(t * 3) * 0.8; cap(px * u + cx, py * u, x * u + cx, y * u, Math.max(0.4, 0.18 * u), S[8]); px = x; py = y; }
+    } else if (kind === "plate") { // 前腕の骨折を留めた金属板(医療の跡。偽装ではない)
+      metal(-12.9, 40, -13.3, 46, 0.25); [41, 43, 45].forEach(y => oval(cx - 13.1 * u, y * u, Math.max(0.8, 0.35 * u), Math.max(0.8, 0.35 * u), S[8]));
+    }
     return g.canvas;
   }
 
-  // ID用の小さな顔写真(24×30)
   // look を渡すと、その見た目で撮った写真になる(登録簿やカードの写真)
-  function photo(A, look) {
+  // w×h の枠に、倍率 k で撮る
+  function photo(A, look, w = 20, h = 26, k = 0.75) {
     const B = look ? Object.assign({}, A, { look }) : A;
-    const big = bust(B, {}, 0.75), cx = Math.round(geom(B, 0.75).cx);
-    const g = V.gfx.art(20, 26);
-    g.rect(0, 0, 20, 26, S[5]);
-    g.ctx.drawImage(big, cx - 10, 0, 20, 26, 0, 2, 20, 26);
+    const big = bust(B, {}, k), cx = Math.round(geom(B, k).cx);
+    const g = V.gfx.art(w, h);
+    g.rect(0, 0, w, h, S[5]);
+    g.ctx.drawImage(big, cx - Math.floor(w / 2), 0, w, h, 0, Math.round(h * 0.08), w, h);
     return g.canvas;
   }
 
@@ -281,15 +352,15 @@
 
   // 封蝋のような印章(搭乗券、規則冊子で使う)
   // col を渡すと、その色で描く(液晶の上では光る線で)
-  function seal(g, x, y, ver, col) {
-    const r = 9, c = col || S[3];
+  function seal(g, x, y, ver, col, r = 9) {
+    const c = col || S[3];
     for (let a = 0; a < 64; a++) {
       const th = (a / 64) * Math.PI * 2;
       g.px(Math.round(x + Math.cos(th) * r), Math.round(y + Math.sin(th) * r), c);
       if (a % (ver === V.SEAL_CURRENT ? 4 : 5) === 0) g.px(Math.round(x + Math.cos(th) * (r - 2)), Math.round(y + Math.sin(th) * (r - 2)), c);
     }
-    g.text(ver, x, y - 4, col || S[2], { align: "center" });
+    g.text(ver, x, y - (r < 9 ? 3 : 4), col || S[2], { align: "center", size: r < 9 ? 12 : 16 });
   }
 
-  V.art = { background, bust, bustX, photo, geom, queuePerson, seal, walker, guard, inspector, silhouette };
+  V.art = { background, bust, xrayBody, photo, geom, queuePerson, seal, walker, guard, inspector, silhouette };
 })();

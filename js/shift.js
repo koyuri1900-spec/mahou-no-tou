@@ -5,24 +5,26 @@
   const SEC_PER_MIN = 0.6;          // 実時間 0.6秒 = ゲーム内1分(1日およそ6分)
   const VERB = { approve: "適格", limit: "限定", deny: "不適格", detain: "拘束" };
   const C = V.LCD;
-  const PHYSICAL = ["id", "hairCard", "envelope"];   // 物として受け渡すのは、IDカード・毛髪台紙・封筒だけ
+  const PHYSICAL = ["id"];   // 物として受け渡すのは、IDカードだけ
   const MUST_RETURN = ["id"];
-  const PANEL_POS = { reg: [172, 131], ticket: [292, 131], permit: [292, 131], med: [292, 184], xfilm: [300, 184] };
+  const PANEL_POS = { reg: [130, 124], ticket: [222, 124], permit: [222, 164], med: [222, 166], xfilm: [292, 124] };
+  const LINKED = ["reg", "ticket"];   // IDカードに紐づくデータ:カードを端末に置くと出て、抜くと消える
+  const BRIEF = { x: 8, y: 92, w: 354, h: 118 };
   const FLAW_TEXT = {
     expired: "IDの期限切れ", status: "INVALID の判定", permit: "作業許可証の不備", genome: "検体と署名の不一致",
     height: "予測身長との不一致", ticketName: "搭乗券の名義違い", ticketDate: "搭乗券の日付違い", seal: "旧版の印章",
-    heart: "記録のない心拍の乱れ", hair: "毛根のない毛髪", hairMissing: "毛髪台紙の未提出", xray: "X線写真の不審物",
+    heart: "記録のない心拍の乱れ", xray: "X線に写った偽装の器具", implant: "記録のない心臓の機器",
     faceReg: "登録簿の顔と本人の不一致", cardForged: "カードの印字の偽造"
   };
   const FLAW_RULE = {
     expired: "rule.expiry", status: "rule.status", permit: "rule.staff", genome: "rule.genome", height: "rule.height",
-    ticketName: "rule.ticket", ticketDate: "rule.ticket", seal: "rule.seal", heart: "rule.heart", hair: "rule.hair", hairMissing: "rule.hair", xray: "rule.xray",
+    ticketName: "rule.ticket", ticketDate: "rule.ticket", seal: "rule.seal", heart: "rule.heart", xray: "rule.xray", implant: "rule.xray",
     faceReg: "rule.face", cardForged: "rule.card"
   };
   const NEW_TOOLS = {
-    1: ["掲示板(上)をクリックして呼び出す", "判定端末 ― IDカードを差すと登録簿が出る", "計器 ― 身長と遺伝子(【採血】)、記録", "規則冊子(窓口の下)・【照合】(右下)"],
-    2: ["搭乗券と医療記録 ― 机にデータで届く", "心拍(計器の身体の欄)", "IDカードの印字と登録簿の照合"],
-    3: ["毛髪台紙とルーペ(机の右の収納)", "体重(計器)と【X線】― 写真がデータで届く"]
+    1: ["掲示板(上)をクリックして呼び出す", "判定端末 ― IDカードを置くと登録簿と搭乗券が出る", "計器 ― 身長と遺伝子(【採血】)、記録", "規則冊子(窓口の下)・【照合】(右下)"],
+    2: ["搭乗券 ― IDカードに紐づいて出る。医療記録はデータで届く", "心拍(計器の身体の欄)", "IDカードの印字と登録簿の照合"],
+    3: ["体重(計器)", "【X線】(計器)― カーテンを閉めて撮影し、全身の写真がデータで届く"]
   };
   const inRect = (x, y, r) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
   const ruleText = key => (V.RULES.find(r => r.key === key) || {}).text || "";
@@ -46,9 +48,8 @@
       case "ticketDate": return `搭乗券の日付 ${T.date} が本日 ${today} ではなかった。`;
       case "seal": return `搭乗券の印章が旧版の ${T.seal} だった。`;
       case "heart": return "心拍に乱れがあり、医療記録がなかった。";
-      case "hair": return "毛髪台紙の毛に毛根がなかった(切った毛)。";
-      case "hairMissing": return `採血の対象者(${A.role === "乗員" ? "乗員" : "ID発行 " + A.issued})なのに、毛髪台紙がなかった。`;
-      case "xray": return "X線写真に、衣服の下の不審物が写っていた。";
+      case "implant": return "X線に心臓の機器が写っていたのに、医療記録がなかった。";
+      case "xray": return A.xray === "bolts" ? "X線に、すねの骨の延長ボルトが写っていた(身長の偽装)。" : "X線に、前腕の血液パッドと指先への管が写っていた(他人の血で採血をごまかす偽装)。";
     }
     return FLAW_TEXT[f.type] || "";
   }
@@ -86,8 +87,7 @@
       rules.loc = "slot"; rules.x = L.bookSlot.x; rules.y = L.bookSlot.y;
       this.rules = rules;
       this.items.push(rules);
-      this.loupe = this.day >= 3 ? { kind: "loupe", w: 30, h: 36, x: L.loupeCase.x + 7, y: L.loupeCase.y - 5, loc: "case" } : null;
-      this.startBtn = { x: L.win.x + 40, y: L.win.y + L.win.h - 22, w: 80, h: 16 };
+      this.startBtn = { x: BRIEF.x + BRIEF.w - 92, y: BRIEF.y + BRIEF.h - 24, w: 80, h: 16 };
       V.audio.startHall();
     }
 
@@ -106,8 +106,8 @@
       this.walkers = this.walkers.filter(w => w.x > -20 && w.x < 500);
       this.updateGuard(dt);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
-      if (this.endConfirm > 0) this.endConfirm = Math.max(0, this.endConfirm - dt);
       this.talkT += dt;
+      if (this.bossT > 0) this.bossT -= dt;
       this.items.forEach(d => { if (d.slide > 0) d.slide = Math.max(0, d.slide - dt * 3); });
       if (this.rules.flip && (this.rules.flip.t += dt) > 0.32) this.rules.flip = null;
       if (this.gene.busy > 0) this.gene.busy = Math.max(0, this.gene.busy - dt);
@@ -138,6 +138,13 @@
       this.started = true;
       V.audio.sfx.chime();
       this.say("sys", `DAY ${this.day} 業務開始。上の掲示板をクリックして呼び出す。`);
+      const B = V.BOSS[this.day];
+      if (B && B.start) this.bossLines(B.start, 0.8);
+    }
+
+    // 主任(上司)が、窓口の後ろから話しかける
+    bossLines(lines, delay = 0) {
+      lines.forEach((t, i) => this.after(delay + i * 3.2, () => { this.say("boss", t); this.bossT = 4; }));
     }
 
     // ---------- 申請者 ----------
@@ -167,15 +174,16 @@
       V.audio.sfx.click();
       // 受取口に出されるのは物(IDカード、毛髪台紙、封筒)。搭乗券などはデータで机に届く
       const give = [V.docs.make("id", A)];
-      if (A.hairCard) give.push(V.docs.make("hairCard", A));
-      if (A.envelope) give.push(V.docs.make("envelope", A));
-      const data = ["ticket", "permit", "med"].filter(k => A[k]);
+      const data = ["permit", "med"].filter(k => A[k]);
       this.after(ENTER_T - 0.3, () => {
         this.placeInTray(give);
         give.forEach(d => { d.loc = "tray"; this.items.push(d); });
         data.forEach(k => this.showPanel(k, A));
         V.audio.sfx.paper();
         A.greet.forEach(line => this.say("them", line));
+        // 主任の頼みごと:申請者のあいさつのあと、主任が後ろから小声で頼む
+        const B = V.BOSS[this.day];
+        if (A.favor && B && B.ask) this.bossLines(B.ask, 3.4);
       });
     }
 
@@ -213,11 +221,13 @@
           if (this.cur !== A) return;
           Object.assign(this.gene, { seq: A.sample, fresh: A.fresh }); A.sampled = true;
           V.audio.sfx.machine();
-          if (A.regRead) this.listen();
+          if (this.term.card && this.term.card.owner === A) this.listen();
         });
       } else if (kind === "xray") {
         if (A.xrayTaken) { this.note("X線写真はもう届いています。"); return; }
-        this.say("you", "X線を撮ります。カーテンを閉めるので、そのまま動かないで。");
+        // 声をかけるかどうかは、そのときどき(黙ってカーテンを引くこともある)
+        const ask = pick(V.LINES.xrayAsk);
+        if (ask) this.say("you", ask);
         this.phase = "away"; this.phaseT = 0;
         V.audio.sfx.drawer();
         this.after(XR.scan0, () => V.audio.sfx.xray());
@@ -230,7 +240,8 @@
       if (!A) return;
       A.xrayTaken = true;
       this.showPanel("xfilm", A);
-      this.say("them", "…終わりましたか。");
+      const done = A.replies.xrayDone !== undefined ? A.replies.xrayDone : pick(V.LINES.xrayDone);
+      if (done) this.say("them", done);
       V.audio.sfx.machine();
     }
 
@@ -238,15 +249,15 @@
       const A = this.cur;
       if (!A || this.phase !== "present") { this.note("窓口に申請者がいません。"); return; }
       const id = this.term.card;
-      if (!id || id.owner !== A) { this.note("IDカードを判定端末に差してから判定してください。"); return; }
+      if (!id || id.owner !== A) { this.note("IDカードを判定端末に置いてから判定してください。"); return; }
       if (id.stamp) { this.note("このIDには、もう判定が書き込まれています。"); return; }
       id.stamp = verdict; id.dirty = true;
       this.verdict = verdict;
       this.term.keys = false; this.closeInspect();
       V.audio.sfx.stamp(verdict === "deny");
       // カードが端末から押し出され、チップのランプが灯る
-      this.term.card = null;
-      id.loc = "desk"; id.x = L.terminal.x - id.w - 4; id.y = L.terminal.y + 6; id.slide = 0.5; id.front();
+      this.term.card = null; this.hideLinked(A);
+      id.loc = "desk"; id.x = L.terminal.x - id.w - 6; id.y = L.terminal.y + 6; id.slide = 0.5; id.front();
       this.say("sys", `判定:${VERB[verdict]}。IDカードを申請者へ返す。`);
     }
 
@@ -256,28 +267,44 @@
       if (!this.started) return;
       if (!A || this.phase !== "present") { this.note("窓口に申請者がいません。"); return; }
       if (this.verdict) { this.note("判定は済んでいます。IDカードを返してください。"); return; }
-      if (!this.term.card || this.term.card.owner !== A) { this.note("IDカードを判定端末に差してください。"); return; }
+      if (!this.term.card || this.term.card.owner !== A) { this.note("IDカードを判定端末に置いてください。"); return; }
       this.term.keys = !this.term.keys; this.closeInspect();
       V.audio.sfx.drawer();
     }
 
-    // IDカードを端末に差す。初めて読んだときに、登録簿が机に出る
+    // IDカードを端末の読み取り台に置く。登録簿と搭乗券(カードに紐づくデータ)が机に出る
     insertCard(d) {
       const A = this.cur;
-      if (this.term.card && this.term.card !== d) { this.note("端末には別のカードが差さっています。"); return false; }
+      if (this.term.card && this.term.card !== d) { this.note("端末には別のカードが置かれています。"); return false; }
       d.loc = "term"; d.dirty = true; this.term.card = d;
       V.audio.sfx.drop();
-      if (d.owner === A && !A.regRead) {
+      if (d.owner === A && !d.stamp) {
+        const first = !A.regRead;
         A.regRead = true;
-        this.after(0.35, () => { if (this.cur !== A) return; this.showPanel("reg", A); V.audio.sfx.machine(); if (this.gene.seq && this.gene.owner === A) this.listen(); });
+        this.after(0.3, () => {
+          if (this.cur !== A || this.term.card !== d) return;
+          LINKED.forEach(k => {
+            if (k === "ticket" && !A.ticket) return;
+            const p = this.items.find(x => x.kind === k && x.owner === A);
+            if (p) { p.loc = "desk"; p.slide = 0.6; p.front(); } else this.showPanel(k, A);
+          });
+          V.audio.sfx.machine();
+          if (first && this.gene.seq && this.gene.owner === A) this.listen();
+        });
       }
       return true;
     }
+    // カードを抜くと、紐づいたデータは机から消える(置いた位置は覚えておく)
+    hideLinked(A) {
+      this.items.forEach(p => { if (p.owner === A && LINKED.includes(p.kind) && p.loc === "desk") p.loc = "hidden"; });
+      if (this.sel && this.sel.doc && this.sel.doc.loc === "hidden") this.sel = null;
+    }
     pullCard(x, y) {
       const d = this.term.card; if (!d) return;
-      this.term.card = null; this.term.keys = false;
+      const c = this.cardRect();
+      this.term.card = null; this.term.keys = false; this.hideLinked(d.owner);
       d.loc = "hand"; d.front(); d.dirty = true;
-      d.x = Math.round(x - d.w / 2); d.y = Math.round(y - 4);
+      d.x = c.x; d.y = c.y;
       this.drag = { item: d, dx: x - d.x, dy: y - d.y, from: "term" };
       V.audio.sfx.paper();
     }
@@ -286,7 +313,7 @@
     listen() {
       const gn = this.gene, A = gn.owner;
       if (!gn.seq || !A) return;
-      if (!A.regRead) { this.note("IDカードを端末に差すと、登録簿の署名と聴き比べられます。"); return; }
+      if (!this.term.card || this.term.card.owner !== A) { this.note("IDカードを端末に置くと、登録簿の署名と聴き比べられます。"); return; }
       gn.play = 0;
       V.audio.genome(A.genome, gn.seq, i => { if (this.gene === gn) gn.play = i; });
     }
@@ -347,7 +374,6 @@
       d.loc = "given";
       this.flying.push({ d, x: d.x, y: d.y, t: 0 });
       V.audio.sfx.paper();
-      if (d.kind === "envelope") this.game.state.flags.envelopeReturned = true;
       this.checkLeave();
       return true;
     }
@@ -365,8 +391,6 @@
 
     finishApplicant() {
       const A = this.cur, verdict = this.verdict;
-      const env = this.items.find(d => d.kind === "envelope" && d.owner === A);
-      if (env && env.loc === "desk") { this.flags.bribe = true; this.game.state.flags.bribe = true; this.say("sys", "封筒を、引き出しにしまった。"); }
       this.items = this.items.filter(d => d.owner !== A);
       if (this.term.card && this.term.card.owner === A) this.term.card = null;
       this.term.keys = false;
@@ -386,6 +410,16 @@
     evaluate(A, verdict) {
       const t = V.applicant.truth(A);
       this.stats.processed++;
+      // 主任の頼みごと:頼みを聞いて通せば、切符は主任が処理し、終業後にチップをくれる
+      const B = V.BOSS[this.day];
+      if (A.favor && B) {
+        if (verdict === "approve") {
+          this.flags.tip = (this.flags.tip || 0) + V.BOSS.tip;
+          this.after(1.2, () => { this.say("boss", B.yes); this.bossT = 4; });
+          return;
+        }
+        if (B.no) this.after(1.2, () => { this.say("boss", B.no); this.bossT = 4; });
+      }
       if (verdict === "detain") this.stats.detained++;
       let lines = [], rule = "";
       if (!t.ok.includes(verdict)) {
@@ -415,20 +449,11 @@
       this.stats.mistakes.push(lines[0]);
       const c = V.docs.make("citation", null);
       c.cite = { n: this.stats.citations, time: this.clockText(), who: A.latin, verdict: VERB[verdict], lines, rule, fine };
-      c.h = 46 + lines.reduce((s, l) => s + V.Surface.wrap(l, c.w - 6).length * 9, 0) + (rule ? V.Surface.wrap("規則:" + rule, c.w - 6).length * 9 : 0);
+      c.h = 31 + lines.reduce((s, l) => s + V.Surface.wrap(l, c.w - 4, 12).length * 7, 0) + (rule ? V.Surface.wrap("規則:" + rule, c.w - 4, 12).length * 7 : 0);
       // 印字機から、机の上端へ押し出される
-      c.loc = "desk"; c.x = 196; c.y = L.gauge.y + L.gauge.h + 2; c.slide = 1; c.front();
+      c.loc = "desk"; c.x = 170; c.y = L.gauge.y + L.gauge.h + 2; c.slide = 1; c.front();
       this.items.push(c);
       V.audio.sfx.citation();
-    }
-
-    // 業務終了:窓口が空いているときに、確認つきで早めに切り上げる
-    pressEnd() {
-      if (!this.started || this.ended) return;
-      if (this.cur) { this.note("申請者の審査を終えてから、業務を終了してください。"); return; }
-      if (this.endConfirm > 0) { this.endConfirm = 0; this.say("sys", `${this.clockText()} 業務を終了した。`); this.endShift(); return; }
-      this.endConfirm = 3; V.audio.sfx.click();
-      this.note("もう一度押すと、今日の業務を終了します。", 3);
     }
 
     // 打ち上げウィンドウが閉じる:未審査の人は翌日の便へ振り替えられ、列が解散する
@@ -471,22 +496,33 @@
           if (this.topDocAt(cx, cy) === d && !this.onDevice(cx, cy)) out.push(r);
         });
       });
+      // 読み取り台に置いたカードの表も見比べられる
+      const tc = this.term.card;
+      if (tc) {
+        tc.render(this.day);
+        const c = this.cardRect();
+        tc.fields.forEach(f => out.push({ key: f.key, x: c.x + f.x, y: c.y + f.y, w: f.w, h: f.h, label: f.label, box: c }));
+      }
       if (A && this.phase === "present") {
         const b = L.gBody, gn = L.gGene, rc = L.gRec;
-        add("body.height", b.x + 2, b.y + 10, 56, 10, `身長 ${A.actualH}cm`, b);
-        if (this.day >= 3) add("scale", b.x + 2, b.y + 19, 56, 10, "体重 " + A.massActual.toFixed(1) + "kg", b);
-        if (this.day >= 2) add("heart", b.x + 2, b.y + 29, b.w - 4, 11, "心拍", b);
+        add("body.height", b.x + 2, b.y + 7, 50, 9, `身長 ${A.actualH}cm`, b);
+        if (this.day >= 3) add("scale", b.x + 2, b.y + 16, 50, 9, "体重 " + A.massActual.toFixed(1) + "kg", b);
+        if (this.day >= 2) add("heart", b.x + 54, b.y + 7, b.w - 56, 18, "心拍", b);
         add("face", ...Object.values(this.faceRect()), "窓口の本人の顔", L.win);
-        if (A.regRead) add("reg.genome", gn.x + 2, gn.y + 11, gn.w - 4, 11, "登録簿の署名 " + A.genome, gn);
-        if (this.gene.seq && this.gene.owner === A) add("seq", gn.x + 2, gn.y + 22, gn.w - 4, 11, "採血の検体 " + this.gene.seq, gn);
-        if (A.regRead) add("rec", rc.x + 2, rc.y + 10, rc.w - 4, 29, "入構の記録", rc);
+        const tag = this.heightTag();
+        add("body.height", tag.x, tag.y, tag.w, tag.h, `頭頂の高さ ${A.actualH}cm`, L.win);
+        const linked = !!(tc && tc.owner === A);
+        if (linked) add("reg.genome", gn.x + 2, gn.y + 8, gn.w - 4, 10, "登録簿の署名 " + A.genome, gn);
+        if (this.gene.seq && this.gene.owner === A) add("seq", gn.x + 2, gn.y + 19, gn.w - 4, 10, "採血の検体 " + this.gene.seq, gn);
+        if (linked) add("rec", rc.x + 2, rc.y + 7, rc.w - 4, 25, "入構の記録", rc);
       }
       return out;
     }
     fieldAt(x, y) {
-      const fs = this.fieldsAt();
-      for (let i = fs.length - 1; i >= 0; i--) if (inRect(x, y, fs[i])) return fs[i];
-      return null;
+      // 重なっているときは、いちばん小さい欄を選ぶ
+      let best = null;
+      this.fieldsAt().forEach(f => { if (inRect(x, y, f) && (!best || f.w * f.h <= best.w * best.h)) best = f; });
+      return best;
     }
     pickField(f) {
       if (!this.sel) { this.sel = f; V.audio.sfx.click(); return; }
@@ -519,6 +555,11 @@
       }
     }
     toggleInspect() { this.inspect = !this.inspect; this.sel = null; this.term.keys = false; V.audio.sfx.click(); this.hintSeen.inspect = true; }
+    // 身長の壁に出る数値の札
+    heightTag() {
+      const top = Math.round(V.cmToY(this.cur.actualH)) - 1, tw = V.Surface.measure(this.cur.actualH + "cm") + 6;
+      return { x: L.win.x + 2, y: top - 5, w: tw, h: 10 };
+    }
     // 窓口に立つ本人の顔のあたり
     faceRect() {
       const A = this.cur, k = V.BUST_K, gm = V.art.geom(A, k), top = Math.round(V.cmToY(A.actualH)) - 1;
@@ -542,11 +583,10 @@
       if (inRect(x, y, L.board)) { if (this.cur) this.note("まだ申請者が窓口にいます。"); else this.callNext(); return; }
       if (this.cur && this.cur.agitated && this.phase === "present" && !this.verdict && inRect(x, y, L.alarm)) { this.detain(); return; }
       if (inRect(x, y, L.inspect)) { if (this.started) this.toggleInspect(); return; }
-      if (inRect(x, y, L.endBtn)) { this.pressEnd(); return; }
-      // 判定端末:せり上がったキー、【判定】、差さったカード
+      // 判定端末:せり上がったキー、【判定】、置かれたカード
       if (this.term.keysK > 0.9) { const k = this.keyRects().find(r => inRect(x, y, r)); if (k) { this.decide(k.v); return; } }
       if (inRect(x, y, this.judgeBtn())) { this.pressJudge(); return; }
-      if (this.term.card && inRect(x, y, this.cardTop())) { if (this.inspect) this.closeInspect(); this.pullCard(x, y); return; }
+      if (this.term.card && !this.inspect && inRect(x, y, this.cardRect())) { this.pullCard(x, y); return; }
       // 計器のボタン
       const gb = this.gaugeBtns().find(b => inRect(x, y, b.r));
       if (gb) { if (gb.on) gb.fn(); return; }
@@ -554,18 +594,16 @@
       if (this.rules.loc === "desk" && this.topDocAt(x, y) === this.rules) {
         this.rules.render(this.day); // 開いた直後でも、矢印の位置を確かめられるように
         const f = this.rules.fields.find(f => f.key.startsWith("tab.") && inRect(x - this.rules.x, y - this.rules.y, f));
-        if (f) { const dir = f.key === "tab.next" ? 1 : -1; this.rules.page += dir; this.rules.dirty = true; this.rules.flip = { dir, t: 0 }; V.audio.sfx.paper(); return; }
+        if (f) {
+          const to = f.key.startsWith("tab.go.") ? Math.floor(+f.key.slice(7) / 2) : this.rules.page + (f.key === "tab.next" ? 1 : -1);
+          if (to !== this.rules.page) { const dir = to > this.rules.page ? 1 : -1; this.rules.page = to; this.rules.dirty = true; this.rules.flip = { dir, t: 0 }; V.audio.sfx.paper(); }
+          return;
+        }
       }
       if (this.inspect) {
         const f = this.fieldAt(x, y);
         if (f) this.pickField(f); else this.sel = null;
         return;
-      }
-      // ルーペ
-      if (this.loupe && this.loupe.loc !== "hand" && inRect(x, y, this.loupe)) {
-        const lp = this.loupe; lp.from = lp.loc; lp.loc = "hand";
-        this.drag = { item: lp, dx: x - lp.x, dy: y - lp.y, from: lp.from, ox: lp.x, oy: lp.y };
-        V.audio.sfx.click(); return;
       }
       if (this.onDevice(x, y)) return;
       // 受取口:縮んだ姿の、つかんだ位置がそのまま書類のつかんだ位置になる
@@ -601,15 +639,11 @@
       const dg = this.drag; if (!dg) return;
       this.drag = null;
       const it = dg.item, A = this.cur;
-      if (it.kind === "loupe") {
-        if (inRect(x, y, L.loupeCase)) { it.loc = "case"; it.x = L.loupeCase.x + 7; it.y = L.loupeCase.y - 6; V.audio.sfx.drop(); return; }
-        it.loc = "desk"; it.x = V.clamp(it.x, L.desk.x, 480 - it.w); it.y = V.clamp(it.y, L.desk.y - 10, 270 - it.h); return;
-      }
       // 規則冊子をクリックしただけなら、机の空いた場所に開く
-      if (it.kind === "rules" && dg.from === "slot" && Math.hypot(x - dg.sx, y - dg.sy) < 3) { it.loc = "desk"; it.x = 178; it.y = 140; it.dirty = true; V.audio.sfx.paper(); return; }
+      if (it.kind === "rules" && dg.from === "slot" && Math.hypot(x - dg.sx, y - dg.sy) < 3) { it.loc = "desk"; it.x = 140; it.y = 126; it.dirty = true; V.audio.sfx.paper(); return; }
       if (it.kind === "citation" && inRect(x, y, L.citeBox)) { this.items = this.items.filter(d => d !== it); V.audio.sfx.drop(); return; }
       if (it.kind === "rules" && inRect(x, y, L.bookSlot)) { this.toSlot(it); return; }
-      // IDカードを判定端末に差す
+      // IDカードを判定端末に置く
       if (it.kind === "id" && inRect(x, y, L.terminal) && !it.stamp) { if (this.insertCard(it)) return; return this.putBack(it, dg); }
       // 申請者へ手渡す(物だけ。データ板は机に残る)
       if (inRect(x, y, L.win) && it.owner && it.owner === A && this.phase === "present" && PHYSICAL.includes(it.kind)) {
@@ -639,12 +673,11 @@
     // 机に据え付けた装置。常に書類より上に描き、その上のクリックは装置のものとして扱う
     deviceRects() {
       const list = [L.gauge, L.terminal];
-      if (this.loupe) list.push(L.loupeCase);
       if (this.alarmShown()) list.push(L.alarm);
       return list;
     }
     alarmShown() { const A = this.cur; return !!(A && A.agitated && this.phase === "present" && !this.verdict); }
-    onDevice(x, y) { return this.deviceRects().some(r => inRect(x, y, r)) || inRect(x, y, L.endBtn) || inRect(x, y, L.inspect); }
+    onDevice(x, y) { return this.deviceRects().some(r => inRect(x, y, r)) || inRect(x, y, L.inspect) || inRect(x, y, L.citeBox); }
     putBack(it, dg) {
       if (dg.from === "tray") { it.loc = "tray"; return; }
       if (dg.from === "term") { this.insertCard(it); return; }
@@ -665,22 +698,23 @@
     }
 
     // ---------- 判定端末と計器の部品 ----------
-    judgeBtn() { const t = L.terminal; return { x: t.x + 4, y: t.y + 35, w: t.w - 8, h: 12 }; }
-    // 端末の差し込み口から上に出ているカードの部分
-    cardTop() { const t = L.terminal; return { x: t.x + 10, y: t.y - 4, w: t.w - 20, h: 12 }; }
+    // 読み取り台(左)に寝かせたカードと、右の細い列:【判定】と、その下の収納からせり上がるキー
+    cardRect() { const t = L.terminal; return { x: t.x + 3, y: t.y + 10, w: 56, h: 32 }; }
+    judgeBtn() { const t = L.terminal; return { x: t.x + 63, y: t.y + 2, w: t.w - 65, h: 10 }; }
     keyRects() {
-      const t = L.terminal, k = this.term.keysK, rise = (h, y) => ({ y: Math.round(y + (1 - k) * h), h });
+      const t = L.terminal, k = this.term.keysK, x = t.x + 64, w = t.w - 67, rise = (h, y) => ({ y: Math.round(y + (1 - k) * h), h });
       return [
-        { v: "approve", x: t.x + 5, w: 37, ...rise(18, t.y + 52) },
-        { v: "deny", x: t.x + 44, w: 37, ...rise(18, t.y + 52) },
-        { v: "limit", x: t.x + 5, w: 76, ...rise(10, t.y + 76) }
+        { v: "approve", x, w, ...rise(9, t.y + 15) },
+        { v: "deny", x, w, ...rise(9, t.y + 25) },
+        { v: "limit", x, w, ...rise(7, t.y + 37) }
       ];
     }
     gaugeBtns() {
       const A = this.cur, ok = !!(A && this.phase === "present"), gn = L.gGene, b = L.gBody, out = [];
-      out.push({ id: "blood", label: "採血", r: { x: gn.x + 62, y: gn.y + 1, w: 30, h: 9 }, on: ok && !A.sampled && this.gene.busy <= 0, fn: () => this.requestSample("blood") });
-      out.push({ id: "listen", label: "♪ 聴く", r: { x: gn.x + 95, y: gn.y + 1, w: 32, h: 9 }, on: ok && !!this.gene.seq && !!A.regRead, fn: () => this.listen() });
-      if (this.day >= 3) out.push({ id: "xray", label: "X線", r: { x: b.x + 66, y: b.y + 19, w: 27, h: 9 }, on: ok && !!A.ticket && !A.xrayTaken, fn: () => this.requestSample("xray") });
+      const linked = !!(ok && this.term.card && this.term.card.owner === A);
+      out.push({ id: "blood", label: "採血", r: { x: gn.x + 70, y: gn.y + 1, w: 30, h: 7 }, on: ok && !A.sampled && this.gene.busy <= 0, fn: () => this.requestSample("blood") });
+      out.push({ id: "listen", label: "♪ 聴く", r: { x: gn.x + 103, y: gn.y + 1, w: 34, h: 7 }, on: ok && !!this.gene.seq && linked, fn: () => this.listen() });
+      if (this.day >= 3) out.push({ id: "xray", label: "X線", r: { x: b.x + 30, y: b.y + 1, w: 22, h: 7 }, on: ok && !!A.ticket && !A.xrayTaken, fn: () => this.requestSample("xray") });
       return out;
     }
 
@@ -688,7 +722,7 @@
     hint() {
       const A = this.cur, day = this.day;
       if (this.ended) return "";
-      if (!this.started) return "今日の規則と道具を確かめたら、窓口の【業務開始】を押してください。";
+      if (!this.started) return "今日の規則と道具を確かめたら、【業務開始】を押してください。";
       if (this.inspect) return this.sel ? "もう一か所を選ぶと照合します。(右クリック/F で照合をやめる)" : "照合モード:食い違っていそうな2か所を順にクリック。(右クリック/F で終わる)";
       if (A && A.agitated && !this.verdict) return "申請者が暴れている。机の【警備を呼ぶ】で拘束できる。";
       if (A && A.massNoted && !A.xrayTaken && this.phase === "present") return "体重が申告と違う。計器の【X線】を押して撮らせる。";
@@ -696,7 +730,7 @@
       if (A && A.tutorial) {
         const id = this.items.find(d => d.kind === "id" && d.owner === A);
         if (this.phase !== "present") return "";
-        if (!A.regRead) return "受取口のIDカードを、右下の判定端末へドラッグして差してください。";
+        if (!A.regRead) return "受取口のIDカードを、右下の判定端末の読み取り台へドラッグして置いてください。";
         if (!this.gene.seq && this.gene.busy <= 0) return "IDの発行が30日以内なので採血の対象。上の計器の【採血】を押す。";
         if (this.gene.seq && !this.hintSeen.inspect) return "右下の【照合】(F/右クリック)で、登録簿の顔と本人、署名と検体などを見比べる。";
         if (!this.verdict) return this.term.keys ? "せり上がったキーで判定を選ぶ。" : "照合を終えたら、端末の【判定】(D)を押す。";
@@ -718,16 +752,13 @@
       this.items.filter(d => d.loc === "desk" || d.loc === "slot").sort((a, b) => a.z - b.z).forEach(d => this.drawDoc(g, d));
       this.drawGauges(g);
       this.drawTerminal(g);
-      this.drawLoupeCase(g);
       this.drawFlying(g);
       this.drawAlarm(g);
-      if (this.loupe && this.loupe.loc !== "hand") this.drawLoupe(g, this.loupe);
       button(g, L.inspect, "照合  F", this.started, this.inspect);
-      button(g, L.endBtn, this.endConfirm > 0 ? "本当に終了?" : "業務終了", this.started && !this.cur && !this.ended, this.endConfirm > 0);
+      if (!this.started) this.drawBriefing(g);
       if (this.drag) {
         const it = this.drag.item;
-        if (it.kind === "loupe") this.drawLoupe(g, it);
-        else this.drawDoc(g, it, true);
+        this.drawDoc(g, it, true);
         this.drawDropTargets(g, it);
       }
       if (this.inspect) this.drawInspect(g);
@@ -764,6 +795,8 @@
       // 詰所の中のあなた
       const k = L.kiosk;
       V.art.inspector(g, k.x + 34, k.y + 9, this.t, !!A);
+      // 主任が話しているあいだは、詰所の奥に立っている
+      if (this.bossT > 0) V.art.walker(g, k.x + 14, k.y + 6, 4242, 0, 1, true);
       // 窓口の前の計量台(一段高い)
       g.rect(166, 73, 20, 3, S[4]); g.rect(166, 76, 20, 1, S[0]); g.rect(166, 73, 20, 1, S[5]);
       // 窓口に立つ申請者(ホール側):詰所の中のあなたと向き合う
@@ -824,8 +857,6 @@
           g.rect(gx, w.y + 34, 40, 100, S[0]); g.rect(gx + 10, w.y + 12, 22, 24, S[0]); g.rect(gx + 6, w.y + 8, 30, 7, S[1]); g.rect(gx + 6, w.y + 14, 30, 2, S[1]);
           g.rect(gx - 18, w.y + 70, 22, 7, S[0]);
         }
-      } else if (!this.started) {
-        this.drawBriefing(g);
       }
       if (A && this.phase === "away") this.drawXrayCurtain(g, A);
       for (let k = 0; k < 34; k++) g.rect(w.x + 124 + k, w.y + 6 + k * 3, 1, 3, "rgba(211,218,220,.08)");
@@ -833,9 +864,10 @@
       const spoken = this.talk.filter(m => m.who !== "sys");
       if (this.started && spoken.length && this.talkT < 9) {
         const m = spoken[spoken.length - 1];
-        const lines = V.Surface.wrap((m.who === "you" ? "> " : "") + m.text, w.w - 16).slice(0, 3);
-        const bh = lines.length * 9 + 4, by = w.y + 3;
-        const bg = m.who === "them" ? S[8] : m.who === "you" ? S[1] : "rgba(13,20,23,.85)", fg = m.who === "them" ? S[0] : S[7];
+        const boss = m.who === "boss";
+        const lines = V.Surface.wrap((m.who === "you" ? "> " : boss ? "主任「" : "") + m.text + (boss ? "」" : ""), w.w - 16).slice(0, 4);
+        const bh = lines.length * 9 + 4, by = boss ? w.y + w.h - bh - 4 : w.y + 3;
+        const bg = m.who === "them" ? S[8] : m.who === "you" ? S[1] : boss ? S[3] : "rgba(13,20,23,.85)", fg = m.who === "them" ? S[0] : boss ? S[8] : S[7];
         g.rect(w.x + 4, by, w.w - 8, bh, bg);
         if (m.who === "them") { g.rect(w.x + w.w / 2 - 3, by + bh, 6, 2, bg); g.rect(w.x + w.w / 2 - 1, by + bh + 2, 2, 2, bg); }
         lines.forEach((ln, i) => g.text(ln, w.x + 8, by + 2 + i * 9, fg));
@@ -860,15 +892,17 @@
       const ease = 1 - Math.pow(1 - k, 2), cw = Math.round(w.w * ease);
       if (cw <= 0) return;
       // 布(ひだの陰影)
+      // 右端から引き出す。ひだは右端に固定され、閉じるほど広がる
+      const x0 = w.x + w.w - cw;
       for (let x = 0; x < cw; x++) {
         const f = Math.sin((x + (1 - ease) * 40) / 4.2);
-        g.rect(w.x + x, w.y + 4, 1, w.h - 4, f > 0.55 ? S[4] : f < -0.55 ? S[2] : S[3]);
+        g.rect(w.x + w.w - 1 - x, w.y + 4, 1, w.h - 4, f > 0.55 ? S[4] : f < -0.55 ? S[2] : S[3]);
       }
-      g.rect(w.x + cw - 1, w.y + 4, 1, w.h - 4, S[1]);
-      g.rect(w.x + cw - 3, w.y + w.h - 6, 3, 6, S[2]);
+      g.rect(x0, w.y + 4, 1, w.h - 4, S[1]);
+      g.rect(x0, w.y + w.h - 6, 3, 6, S[2]);
       // レールと吊り輪
       g.rect(w.x, w.y, w.w, 3, S[1]); g.rect(w.x, w.y + 2, w.w, 1, S[5]);
-      for (let x = 2; x < cw; x += Math.max(6, Math.round(cw / 14))) g.rect(w.x + x, w.y + 1, 2, 4, S[6]);
+      for (let x = 2; x < cw; x += Math.max(6, Math.round(cw / 14))) g.rect(w.x + w.w - 2 - x, w.y + 1, 2, 4, S[6]);
       if (k < 1) return;
       // 撮影中の灯
       const on = t >= XR.close + 0.15 && t < XR.open, lx = w.x + w.w / 2 - 22, ly = w.y + w.h - 18;
@@ -878,8 +912,10 @@
       // 光の帯と、布ごしに透ける骨
       if (t >= XR.scan0 && t < XR.scan1) {
         const p = (t - XR.scan0) / (XR.scan1 - XR.scan0), top = w.y + 22, bot = w.y + w.h, y = Math.round(top + (bot - top) * p);
-        if (!A._xray) A._xray = V.art.bustX(A);
-        const img = A._xray, bx = Math.round(w.x + w.w / 2 - img.width / 2), by = Math.round(V.cmToY(A.actualH)) - 1;
+        // 窓の上半身と頭の大きさがそろう倍率で、全身のX線像を重ねる
+        const k = V.BUST_K;
+        if (!A._xray) A._xray = V.art.xrayBody(A, 210 * k);
+        const img = A._xray, bx = Math.round(w.x + w.w / 2 - img.width / 2), by = Math.round(V.cmToY(A.actualH)) - 1 - Math.round(0.6 * k);
         const band = 14, ctx = g.ctx;
         ctx.save(); ctx.beginPath(); ctx.rect(w.x * 2, (y - band) * 2, w.w * 2, band * 2); ctx.clip();
         ctx.globalAlpha = 0.35; g.img(img, bx, by); ctx.restore();
@@ -888,17 +924,19 @@
       }
     }
 
+    // 朝の業務説明:窓口と机にまたがる板。【業務開始】を押すまで時計は止まっている
     drawBriefing(g) {
-      const w = L.win, d = this.day;
-      g.rect(w.x + 6, w.y + 6, w.w - 12, w.h - 12, "rgba(13,20,23,.92)");
-      g.text(`DAY ${d} の業務`, w.x + 12, w.y + 10, S[8]);
-      let y = w.y + 22;
+      const B = BRIEF, d = this.day, x = B.x + 8;
+      g.rect(B.x, B.y, B.w, B.h, "rgba(13,20,23,.94)"); g.frame(B.x, B.y, B.w, B.h, S[4]);
+      g.text(`DAY ${d} の業務`, x, B.y + 5, S[8]);
+      let y = B.y + 18;
       const rules = V.RULES.filter(r => r.day === d);
-      g.text(`${d === 1 ? "規則" : "新しい規則"}(${rules.length}件・規則冊子)`, w.x + 12, y, S[5]); y += 10;
-      rules.slice(0, 3).forEach(r => { g.text("・" + shorten(r.text, w.w - 26), w.x + 12, y, S[7]); y += 9; });
-      y += 2;
-      g.text(d === 1 ? "道具" : "新しい道具", w.x + 12, y, S[5]); y += 10;
-      NEW_TOOLS[d].slice(0, 3).forEach(t => { g.text("・" + shorten(t, w.w - 26), w.x + 12, y, S[7]); y += 9; });
+      g.text(`${d === 1 ? "規則" : "新しい規則"}(${rules.length}件・規則冊子)`, x, y, S[5]); y += 10;
+      rules.slice(0, 5).forEach(r => { g.text("・" + shorten(r.text, B.w - 20), x, y, S[7]); y += 9; });
+      if (rules.length > 5) { g.text(`ほか${rules.length - 5}件`, x + 8, y, S[5]); y += 9; }
+      y += 3;
+      g.text(d === 1 ? "道具" : "新しい道具", x, y, S[5]); y += 10;
+      NEW_TOOLS[d].forEach(t => { g.text("・" + shorten(t, B.w - 110), x, y, S[7]); y += 9; });
       const b = this.startBtn, hov = inRect(this.mouse.x, this.mouse.y, b), blink = Math.floor(this.t * 2) % 2 === 0;
       g.rect(b.x + 1, b.y + 2, b.w, b.h, S[0]);
       g.rect(b.x, b.y + (hov ? 1 : 0), b.w, b.h, hov || blink ? S[8] : S[7]);
@@ -917,16 +955,17 @@
       g.text(this.today.slice(0, 4), c.x + c.w - 3, c.y + 2, S[5], { align: "right" });
       g.text(this.today.slice(5), c.x + c.w - 3, c.y + 11, S[7], { align: "right" });
       if (this.rules.loc !== "slot") g.text("規則", L.bookSlot.x + L.bookSlot.w / 2, L.bookSlot.y + 6, S[3], { align: "center" });
+      // 切符入れ(机の左下の差し込み口)
       const cb = L.citeBox;
-      g.text("切符入れ", cb.x + cb.w / 2, cb.y + 6, this.items.some(d => d.kind === "citation") ? S[6] : S[3], { align: "center" });
+      g.rect(cb.x, cb.y, cb.w, cb.h, S[1]); g.frame(cb.x, cb.y, cb.w, cb.h, S[3]); g.rect(cb.x + 4, cb.y + 3, cb.w - 8, 2, S[0]);
+      g.text("切符入れ", cb.x + cb.w / 2, cb.y + 7, this.items.some(d => d.kind === "citation") ? S[7] : S[4], { align: "center", size: 12 });
     }
 
     // 引きずっている物を落とせる場所を示す
     drawDropTargets(g, it) {
       const A = this.cur, glow = (r, label) => { g.frame(r.x, r.y, r.w, r.h, S[7]); if (label) { const w = V.Surface.measure(label) + 8; g.rect(r.x + r.w / 2 - w / 2, r.y + r.h - 13, w, 11, S[7]); g.text(label, r.x + r.w / 2, r.y + r.h - 12, S[0], { align: "center" }); } };
-      if (it.kind === "loupe") { glow(L.loupeCase); return; }
       if (it.owner && it.owner === A && this.phase === "present" && PHYSICAL.includes(it.kind) && (!MUST_RETURN.includes(it.kind) || this.verdict)) glow(L.win, "手渡して返す");
-      if (it.kind === "id" && !it.stamp) glow(L.terminal, "差す");
+      if (it.kind === "id" && !it.stamp) glow(L.terminal, "置く");
       if (it.kind === "rules") glow(L.bookSlot);
       if (it.kind === "citation") glow(L.citeBox);
     }
@@ -947,118 +986,101 @@
     // 計器の帯:身体・遺伝子・記録。据え付けなので、書類より上に描く
     drawGauges(g) {
       const A = this.cur, present = !!(A && this.phase === "present"), day = this.day;
+      const linked = !!(present && this.term.card && this.term.card.owner === A);
       const sec = (r, title) => {
         g.rect(r.x, r.y, r.w, r.h, C.panel); g.frame(r.x, r.y, r.w, r.h, C.line);
         g.rect(r.x + 1, r.y + 1, r.w - 2, 1, C.glow);
-        g.text(title, r.x + 3, r.y + 1, C.dim);
+        g.text(title, r.x + 3, r.y + 1, C.dim, { size: 12 });
       };
       const bases = (seq, x, y) => { for (let i = 0; i < 16; i++) { const b = seq[i], bx = x + i * 6; g.rect(bx, y, 5, 9, V.BASE[b]); g.text(b, bx + 0.5, y + 1, S[0]); } };
-      // 身体
+      // 身体:左に数値、右に心拍
       const b = L.gBody;
       sec(b, "身体");
-      g.text("身長", b.x + 3, b.y + 10, C.dim); g.text(present ? A.actualH + "cm" : "---", b.x + 22, b.y + 10, present ? C.hi : C.dim);
-      if (day >= 3) { g.text("体重", b.x + 3, b.y + 19, C.dim); g.text(present ? A.massActual.toFixed(1) + "kg" : "---", b.x + 22, b.y + 19, present ? C.hi : C.dim); }
+      g.text("身長", b.x + 3, b.y + 8, C.dim); g.text(present ? A.actualH + "cm" : "---", b.x + 21, b.y + 8, present ? C.hi : C.dim);
+      if (day >= 3) { g.text("体重", b.x + 3, b.y + 17, C.dim); g.text(present ? A.massActual.toFixed(1) + "kg" : "---", b.x + 21, b.y + 17, present ? C.hi : C.dim); }
       if (day >= 2) {
-        const hy = b.y + 34, hx = b.x + 22, hw = b.w - 26;
-        g.text("心拍", b.x + 3, b.y + 30, C.dim);
+        const hx = b.x + 56, hw = b.w - 59, hy = b.y + 17;
+        g.text("心拍", hx + hw, b.y + 1, C.dim, { size: 12, align: "right" });
         if (present) {
           const irr = A.heart === "irregular";
           let prev = hy;
           for (let x = 0; x < hw; x++) {
             const ph = (x + this.t * 30) % 19, beat = irr ? ((x + Math.floor(this.t * 30)) % 37 < 19 ? 0 : 4) : 0;
             let y = hy;
-            if (Math.abs(ph - (8 + beat)) < 1) y = hy - 5; else if (Math.abs(ph - (9 + beat)) < 1) y = hy + 4;
+            if (Math.abs(ph - (8 + beat)) < 1) y = hy - 7; else if (Math.abs(ph - (9 + beat)) < 1) y = hy + 5;
             g.rect(hx + x, Math.min(prev, y), 1, Math.abs(prev - y) + 1, C.text);
             prev = y;
           }
         } else g.rect(hx, hy, hw, 1, C.line);
       }
-      // 遺伝子:上の行が登録簿の署名、下の行が採血した検体。【♪ 聴く】で左右の耳に聴き比べる
+      // 遺伝子:上の行が登録簿の署名(カードを置いているあいだだけ)、下の行が採血した検体
       const gn = L.gGene;
       sec(gn, "遺伝子");
-      g.text("登録", gn.x + 3, gn.y + 12, C.dim); g.text("検体", gn.x + 3, gn.y + 23, C.dim);
-      if (A && A.regRead && present) bases(A.genome, gn.x + 30, gn.y + 12);
-      else g.text("― カード未読 ―", gn.x + 78, gn.y + 12, C.line, { align: "center" });
+      g.text("登録", gn.x + 3, gn.y + 9, C.dim); g.text("検体", gn.x + 3, gn.y + 20, C.dim);
+      const bx = gn.x + 26;
+      if (linked) bases(A.genome, bx, gn.y + 8);
+      else g.text("― カード未読 ―", bx + 48, gn.y + 9, C.line, { align: "center" });
       const gs = this.gene;
-      if (gs.busy > 0) { const k = 1 - gs.busy / 1.4; g.rect(gn.x + 30, gn.y + 26, Math.round(95 * k), 3, C.text); }
+      if (gs.busy > 0) { const k = 1 - gs.busy / 1.4; g.rect(bx, gn.y + 23, Math.round(95 * k), 3, C.text); }
       else if (gs.seq && present) {
-        bases(gs.seq, gn.x + 30, gn.y + 23);
-        if (gs.play >= 0 && gs.play < 16) g.rect(gn.x + 30 + gs.play * 6, gn.y + 33, 5, 2, C.hi);
-        if (gs.fresh > 0) g.text(`凝固 +${gs.fresh.toFixed(1)}s`, gn.x + gn.w - 3, gn.y + 33, C.text, { align: "right", size: 12 });
-      } else g.text("― 未採血 ―", gn.x + 78, gn.y + 23, C.line, { align: "center" });
-      // 記録:カードを読むと、入構の履歴が出る
+        bases(gs.seq, bx, gn.y + 19);
+        if (gs.play >= 0 && gs.play < 16) g.rect(bx + gs.play * 6, gn.y + 29, 5, 2, C.hi);
+        if (gs.fresh > 0) g.text(`凝固+${gs.fresh.toFixed(1)}s`, gn.x + gn.w - 3, gn.y + 25, C.text, { align: "right", size: 12 });
+      } else g.text("― 未採血 ―", bx + 48, gn.y + 20, C.line, { align: "center" });
+      // 記録:カードを置いているあいだ、入構の履歴が出る
       const rc = L.gRec;
       sec(rc, "記録");
-      if (A && A.regRead && present) {
+      if (linked) {
         const r = A.rec;
-        if (!r.visits) g.text("初めての入構", rc.x + 3, rc.y + 12, C.hi);
+        if (!r.visits) g.text("初めての入構", rc.x + 3, rc.y + 9, C.hi);
         else {
-          g.text("前回 " + r.last.slice(5), rc.x + 3, rc.y + 11, C.hi);
-          g.text("判定 " + (r.verdict || (A.status === "INVALID" ? "限定" : "適格")), rc.x + 3, rc.y + 20, C.hi);
-          g.text(`入構 ${r.visits}回`, rc.x + 3, rc.y + 29, C.text);
+          g.text("前回 " + r.last.slice(5) + " " + (r.verdict || (A.status === "INVALID" ? "限定" : "適格")), rc.x + 3, rc.y + 8, C.hi);
+          g.text(`入構 ${r.visits}回`, rc.x + 3, rc.y + 17, C.text);
         }
-      } else g.text("―", rc.x + rc.w / 2, rc.y + 18, C.line, { align: "center" });
+      } else g.text("―", rc.x + rc.w / 2, rc.y + 13, C.line, { align: "center" });
       // ボタン
       this.gaugeBtns().forEach(bt => {
         const r = bt.r, hov = bt.on && inRect(this.mouse.x, this.mouse.y, r);
         g.rect(r.x, r.y, r.w, r.h, hov ? C.text : bt.on ? C.line : C.panel);
         g.frame(r.x, r.y, r.w, r.h, bt.on ? C.text : C.line);
-        g.text(bt.label, r.x + r.w / 2, r.y + 1, hov ? S[0] : bt.on ? C.hi : C.line, { align: "center", size: 12 });
+        g.text(bt.label, r.x + r.w / 2, r.y, hov ? S[0] : bt.on ? C.hi : C.line, { align: "center", size: 12 });
       });
     }
 
-    // 判定端末:上の差し込み口にIDカードを差す。【判定】を押すと、光るキーが収納からせり上がる
+    // 判定端末:左の読み取り台にIDカードを寝かせて置く。右の【判定】を押すと、細いキーが収納からせり上がる
     drawTerminal(g) {
       const t = L.terminal, A = this.cur, card = this.term.card;
       g.rect(t.x + 1, t.y + 2, t.w, t.h, S[0]);
       g.rect(t.x, t.y, t.w, t.h, S[2]); g.frame(t.x, t.y, t.w, t.h, S[4]);
-      if (!card) g.text("判定端末", t.x + 4, t.y + 1, S[5], { size: 12 });
-      // 差し込み口と、差さったカードの頭
-      g.rect(t.x + 8, t.y + 9, t.w - 16, 2, S[0]);
+      const c = this.cardRect();
+      g.rect(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.base); g.frame(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.line);
+      g.text("判定端末", t.x + 3, t.y + 1, S[5], { size: 12 });
       if (card) {
-        const c = this.cardTop(), hov = inRect(this.mouse.x, this.mouse.y, c);
-        g.rect(c.x, c.y + (hov ? -1 : 0), c.w, 13 - (hov ? -1 : 0), S[7]); g.rect(c.x, c.y + (hov ? -1 : 0), c.w, 3, S[3]);
-        g.rect(c.x + 3, c.y + 4, 8, 5, S[5]);
-        g.rect(t.x + 8, t.y + 9, t.w - 16, 2, S[0]);
-      }
-      // 小さな画面
-      const sx = t.x + 4, sy = t.y + 13;
-      g.rect(sx, sy, t.w - 8, 20, C.base); g.frame(sx, sy, t.w - 8, 20, C.line);
-      const lines = !card ? ["IDカードを", "差してください"] : card.owner !== A ? ["別のカード", ""] : this.term.keys ? ["判定を選ぶ", "1 適格 2 不適格"] : [card.owner.regLatin.split(" ")[1] || "", "照合後に【判定】"];
-      lines.forEach((ln, i) => g.text(ln, sx + 3, sy + 1 + i * 9, i ? C.text : C.hi, { size: i ? 12 : 16 }));
+        const img = card.render(this.day);
+        g.imgSame(img, c.x, c.y);
+        if (!this.inspect && inRect(this.mouse.x, this.mouse.y, c)) g.frame(c.x - 1, c.y - 1, c.w + 2, c.h + 2, C.hi);
+      } else g.text("IDカードを置く", c.x + c.w / 2, c.y + 13, C.dim, { align: "center", size: 12 });
       // 【判定】ボタン
       const jb = this.judgeBtn(), can = !!(card && A && card.owner === A && this.phase === "present" && !this.verdict), hov = can && inRect(this.mouse.x, this.mouse.y, jb);
       g.rect(jb.x, jb.y + 1, jb.w, jb.h, S[0]);
       g.rect(jb.x, jb.y + (hov ? 1 : 0), jb.w, jb.h, this.term.keys ? S[7] : can ? S[5] : S[3]);
-      g.text("判定  D", jb.x + jb.w / 2, jb.y + 2 + (hov ? 1 : 0), this.term.keys || can ? S[0] : S[4], { align: "center" });
+      g.text("判定", jb.x + jb.w / 2, jb.y + 2 + (hov ? 1 : 0), this.term.keys || can ? S[0] : S[4], { align: "center", size: 12 });
       // キーの収納:ふだんは閉じている
-      const bay = { x: t.x + 4, y: t.y + 50, w: t.w - 8, h: 37 };
+      const bay = { x: jb.x, y: t.y + 14, w: jb.w, h: t.h - 16 };
       g.rect(bay.x, bay.y, bay.w, bay.h, S[0]);
       const k = this.term.keysK;
-      if (k < 0.05) {
-        for (let y = bay.y + 3; y < bay.y + bay.h; y += 4) g.rect(bay.x + 2, y, bay.w - 4, 1, S[1]);
-        return;
-      }
+      if (k < 0.05) { for (let y = bay.y + 3; y < bay.y + bay.h; y += 4) g.rect(bay.x + 2, y, bay.w - 4, 1, S[1]); return; }
       const ctx = g.ctx; ctx.save(); ctx.beginPath(); ctx.rect(bay.x * 2, bay.y * 2, bay.w * 2, bay.h * 2); ctx.clip();
-      g.rect(bay.x, t.y + 73, bay.w, 1, S[3]);
-      const style = { approve: ["適格", S[8], S[0]], deny: ["不適格", V.RED, S[8]], limit: ["限定(地上職員のみ)", S[5], S[0]] };
-      this.keyRects().forEach((r, i) => {
+      g.rect(bay.x, t.y + 35, bay.w, 1, S[3]);
+      const style = { approve: ["適格", S[8], S[0]], deny: ["不適格", V.RED, S[8]], limit: ["限定", S[5], S[0]] };
+      this.keyRects().forEach(r => {
         const [label, col, tc] = style[r.v], hv = k > 0.9 && inRect(this.mouse.x, this.mouse.y, r);
-        // 淡い光:キーのまわりがわずかに滲む
         g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, r.v === "deny" ? "rgba(209,67,47,.25)" : "rgba(236,239,238,.16)");
         g.rect(r.x, r.y + (hv ? 1 : 0), r.w, r.h - 1, col);
-        g.rect(r.x, r.y + (hv ? 1 : 0), r.w, 2, "rgba(255,255,255,.25)");
-        g.text(label, r.x + r.w / 2, r.y + Math.round(r.h / 2) - 4 + (hv ? 1 : 0), tc, { align: "center", size: r.v === "limit" ? 12 : 16 });
-        if (r.v !== "limit") g.text(String(i + 1), r.x + r.w - 3, r.y + r.h - 8, tc, { align: "right", size: 12 });
+        g.rect(r.x, r.y + (hv ? 1 : 0), r.w, 1, "rgba(255,255,255,.25)");
+        g.text(label, r.x + r.w / 2, r.y + Math.round(r.h / 2) - 3 + (hv ? 1 : 0), tc, { align: "center", size: 12 });
       });
       ctx.restore();
-    }
-
-    drawLoupeCase(g) {
-      if (!this.loupe) return;
-      const lc = L.loupeCase;
-      g.rect(lc.x + 1, lc.y + 1, lc.w, lc.h, S[0]); g.rect(lc.x, lc.y, lc.w, lc.h, S[1]); g.frame(lc.x, lc.y, lc.w, lc.h, S[3]);
-      if (this.loupe.loc !== "case") g.text("ルーペ", lc.x + lc.w / 2, lc.y + 8, S[4], { align: "center" });
     }
 
     drawAlarm(g) {
@@ -1067,27 +1089,6 @@
       g.rect(a.x + 1, a.y + 2, a.w, a.h, S[0]);
       g.rect(a.x, a.y + (hov ? 1 : 0), a.w, a.h, on ? V.RED : V.RED_DARK);
       g.text("警備を呼ぶ(拘束)", a.x + a.w / 2, a.y + 7 + (hov ? 1 : 0), S[8], { align: "center", size: 12 });
-    }
-
-    // ルーペ:レンズの下にあるものを3倍に拡大して見せる
-    drawLoupe(g, lp) {
-      const cx = lp.x + 15, cy = lp.y + 15, r = 13, ctx = g.ctx;
-      if (lp.loc !== "case") {
-        const src = r / 3;
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2, 0, Math.PI * 2); ctx.clip();
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(g.canvas, (cx - src) * 2, (cy - src) * 2, src * 4, src * 4, (cx - r) * 2, (cy - r) * 2, r * 4, r * 4);
-        ctx.restore();
-      }
-      ctx.save();
-      ctx.lineWidth = 4; ctx.strokeStyle = S[0];
-      ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2 + 1, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 2; ctx.strokeStyle = S[5];
-      ctx.beginPath(); ctx.arc(cx * 2, cy * 2, r * 2 + 1, 0, Math.PI * 2); ctx.stroke();
-      if (lp.loc === "case") { ctx.fillStyle = "rgba(163,176,181,.35)"; ctx.fill(); }
-      ctx.restore();
-      g.rect(cx + 9, cy + 9, 3, 3, S[5]); g.rect(cx + 11, cy + 11, 4, 4, S[1]); g.rect(cx + 13, cy + 13, 4, 6, S[1]);
     }
 
     drawDoc(g, d, held) {
@@ -1126,37 +1127,33 @@
       const sctx = snap.getContext("2d");
       sctx.clearRect(0, 0, snap.width, snap.height); sctx.drawImage(g.canvas, 0, 0);
       const restore = (r, pad) => { const x = (r.x - pad) * 2, y = (r.y - pad) * 2, w = (r.w + pad * 2) * 2, h = (r.h + pad * 2) * 2; ctx.drawImage(snap, x, y, w, h, x, y, w, h); };
-      g.rect(0, 0, 480, 270, "rgba(5,9,11,.68)");
-      // 欄を含む書類や装置は、少しだけ暗くして読めるように残す
+      g.rect(0, 0, 480, 270, "rgba(5,9,11,.74)");
+      // 欄を含む書類や装置は、暗めに残して位置がわかるようにする
       const boxes = [...new Set(fs.map(f => f.box).filter(Boolean))];
-      boxes.forEach(b => { restore(b, 0); g.rect(b.x, b.y, b.w, b.h, "rgba(5,9,11,.42)"); });
-      fs.forEach(f => restore(f, 1));
+      boxes.forEach(b => { restore(b, 0); g.rect(b.x, b.y, b.w, b.h, "rgba(5,9,11,.55)"); });
+      // 欄そのものは元の明るさで戻す。枠は描かず、左に小さな印だけ付ける(行が詰まっていても重ならない)
+      fs.forEach(f => restore(f, 0));
       // 照合ボタンは明るいまま
       button(g, L.inspect, "照合  F", true, true);
       const hov = this.fieldAt(this.mouse.x, this.mouse.y);
-      fs.forEach(f => corners(g, f, f === hov ? S[8] : S[5]));
+      fs.forEach(f => { if (f !== hov && !(this.sel && this.sel.key === f.key && this.sel.x === f.x)) g.rect(f.x - 2, f.y + Math.floor(f.h / 2) - 1, 1, 2, S[6]); });
+      const lit = (r, strong) => { g.rect(r.x, r.y, r.w, r.h, strong ? "rgba(236,239,238,.22)" : "rgba(236,239,238,.14)"); g.frame(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[8]); };
+      if (hov) { if (hov.box) g.frame(hov.box.x - 1, hov.box.y - 1, hov.box.w + 2, hov.box.h + 2, S[4]); lit(hov); }
       if (this.sel) {
         const r = this.sel;
-        g.frame(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[8]); g.frame(r.x - 2, r.y - 2, r.w + 4, r.h + 4, S[8]);
+        lit(r, true); g.frame(r.x - 2, r.y - 2, r.w + 4, r.h + 4, S[6]);
         const x0 = r.x + r.w / 2, y0 = r.y + r.h / 2, x1 = this.mouse.x, y1 = this.mouse.y, n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 3));
         for (let i = 0; i <= n; i++) if (i % 2 === 0) g.rect(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), 1, 1, S[8]);
       }
       const tip = hov || this.sel;
       if (tip && tip.label) {
         const t = (this.sel && hov && hov.key !== this.sel.key ? shortLabel(this.sel) + " ⇔ " : "") + tip.label;
-        const w = Math.min(300, V.Surface.measure(t) + 10), x = V.clamp(this.mouse.x + 8, 2, 478 - w), y = V.clamp(this.mouse.y + 12, 14, 254);
-        g.rect(x, y, w, 12, S[8]); g.text(t, x + 5, y + 2, S[0]);
+        const w = Math.min(300, V.Surface.measure(t, 12) + 8), x = V.clamp(this.mouse.x + 8, 2, 478 - w), y = V.clamp(this.mouse.y + 10, 14, 258);
+        g.rect(x, y, w, 9, S[8]); g.text(t, x + 4, y + 1.5, S[0], { size: 12 });
       }
     }
   }
 
-  function corners(g, f, c) {
-    const x0 = f.x - 2, y0 = f.y - 2, x1 = f.x + f.w + 1, y1 = f.y + f.h + 1, l = 3;
-    g.rect(x0, y0, l, 1, c); g.rect(x0, y0, 1, l, c);
-    g.rect(x1 - l + 1, y0, l, 1, c); g.rect(x1, y0, 1, l, c);
-    g.rect(x0, y1, l, 1, c); g.rect(x0, y1 - l + 1, 1, l, c);
-    g.rect(x1 - l + 1, y1, l, 1, c); g.rect(x1, y1 - l + 1, 1, l, c);
-  }
   function button(g, r, label, enabled, lit) {
     g.rect(r.x + 1, r.y + 1, r.w, r.h, S[0]);
     g.rect(r.x, r.y, r.w, r.h, lit ? S[7] : enabled ? S[4] : S[2]);

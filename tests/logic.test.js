@@ -16,7 +16,7 @@ const make = (day, id, flags = {}) => {
 };
 
 test("物語の申請者の正しい判定", () => {
-  const expect = { 1: { rina: "approve", tam: "deny", walter: "limit", kai: "detain" }, 2: { mira: "deny", plum: "approve", hallow: "approve", broker: "approve" }, 3: { nora: "approve", sol: "detain", hallow2: "approve" } };
+  const expect = { 1: { rina: "approve", tam: "deny", walter: "limit", kai: "detain" }, 2: { mira: "deny", plum: "approve", hallow: "approve" }, 3: { nora: "approve", edith: "deny", sol: "detain", hallow2: "approve" } };
   for (const day of [1, 2, 3]) for (const [id, best] of Object.entries(expect[day])) {
     assert.strictEqual(V.applicant.truth(make(day, id)).best, best, `${day}日目 ${id}`);
   }
@@ -27,9 +27,10 @@ test("カイの欠点は身長と遺伝子の2つ", () => {
   assert.strictEqual(types, "genome,height");
 });
 
-test("ソルの欠点は毛髪とX線", () => {
-  const types = [...V.applicant.flaws(make(3, "sol")).map(f => f.type)].sort().join(",");
-  assert.strictEqual(types, "hair,xray");
+test("ソルの欠点はX線の血液パッド(遺伝子は一致する)", () => {
+  const A = make(3, "sol");
+  assert.strictEqual(V.applicant.flaws(A).map(f => f.type).join(","), "xray");
+  assert.strictEqual(A.sample, A.genome);
 });
 
 test("採血の対象者:乗員と、ID発行から30日以内の者", () => {
@@ -47,21 +48,24 @@ test("遺伝子の不一致は、採血の対象者にだけ仕込まれる", ()
   }
 });
 
-test("3日目:対象者は毛髪台紙を出し、台紙がなければ不適格", () => {
-  for (let seed = 1; seed < 200; seed++) {
-    const A = V.applicant.create(3, seed, null, null);
-    assert.strictEqual(A.hairCard, A.target);
-    const B = V.applicant.create(3, seed, null, "hairMissing");
-    if (B.role !== "地上職員") { assert.strictEqual(B.hairCard, false); assert.strictEqual(V.applicant.truth(B).best, "deny"); }
+test("X線に写る物:パッドとボルトは拘束、記録のない心臓の機器は不適格", () => {
+  for (let seed = 1; seed < 300; seed++) {
+    const A = V.applicant.create(3, seed, null, "xray");
+    if (!A.ticket) continue;
+    const best = V.applicant.truth(A).best;
+    if (A.xray === "device") assert.ok(["deny", "detain"].includes(best));
+    else assert.strictEqual(best, "detain");
+    assert.ok(Math.abs(A.massActual - A.ticket.mass) > 0.5);
   }
 });
 
-test("体重が違うだけの申請者は、X線に何も写らず適格", () => {
+test("体重が違うだけの申請者は、X線に何も写らないか無害な物だけで適格", () => {
   for (let seed = 1; seed < 200; seed++) {
     const A = V.applicant.create(3, seed, null, "mass");
     if (!A.ticket) continue;
     assert.ok(Math.abs(A.massActual - A.ticket.mass) > 0.5);
-    assert.strictEqual(A.xray, null);
+    assert.ok([null, "plate", "device"].includes(A.xray));
+    assert.ok(!V.applicant.flaws(A).some(f => f.type === "xray" || f.type === "implant"), `seed ${seed}`);
   }
 });
 
@@ -81,8 +85,7 @@ test("名もなき申請者:仕込んだ欠点が必ず判定に現れる", () =
       const A = V.applicant.create(day, seed, null, flaw);
       const f = V.applicant.flaws(A);
       const noTicket = ["ticketName", "ticketDate", "seal", "xray"].includes(flaw) && !A.ticket;
-      const staffSkip = ["hair", "hairMissing"].includes(flaw) && A.role === "地上職員";
-      if (noTicket || staffSkip || flaw === "mass") continue; // mass は体重が違うだけで、偽装ではない
+      if (noTicket || flaw === "mass") continue; // mass は体重が違うだけで、偽装ではない
       assert.ok(f.length > 0, `${day}日目 seed ${seed} 欠点 ${flaw} が判定に出ない`);
       assert.ok(["deny", "detain"].includes(V.applicant.truth(A).best));
     }
@@ -127,4 +130,10 @@ test("カードの偽造:印字が登録簿と違えば拘束。氏名の差し�
     if (A.forged === "name") assert.ok(V.applicant.match(A, "card.name", "reg.name"));
     assert.strictEqual(V.applicant.truth(A).best, "detain");
   }
+});
+
+test("主任の頼みごとの申請者は、規則では不適格(昨日の日付の搭乗券)", () => {
+  const A = make(3, "edith");
+  assert.ok(A.favor);
+  assert.strictEqual(V.applicant.flaws(A).map(f => f.type).join(","), "ticketDate");
 });

@@ -70,10 +70,8 @@
       fresh: spec.fresh || 0,
       hand: spec.hand || null,
       look,
-      ticket: null, permit: null, med: null, envelope: !!spec.envelope,
+      ticket: null, permit: null, med: null, favor: !!spec.favor,
       heart: spec.heart || "normal",
-      hairSample: spec.hair || "root",
-      hairCard: false,
       massActual: 0,
       xray: spec.xray || null,
       // 登録簿(IDカードのチップが指す記録)と、カードの印字。ふつうは本人と同じ
@@ -100,7 +98,6 @@
     if (spec.med) A.med = Object.assign({ name: latin, cond: "不整脈" }, spec.med);
     if (flaw) applyFlaw(A, flaw, r, today);
     A.target = isTarget(A);
-    if (day >= 3 && A.target && A.planted !== "hairMissing") A.hairCard = true;
     return A;
   }
 
@@ -131,7 +128,7 @@
   // 本人ではない者が来ると、血も別人のものになる
   const impostorBlood = (A, r) => { A.sample = mutate(A.genome, [r.int(0, 7), r.int(8, 15)], r); };
 
-  // 採血(と3日目からは毛髪台紙)の対象者:乗員と、IDの発行から30日以内の者
+  // 採血の対象者:乗員と、IDの発行から30日以内の者
   function isTarget(A) { return A.role === "乗員" || daysBetween(A.issued, V.DATES[A.day]) <= V.SAMPLE_DAYS; }
   const recent = (A, r, today) => { A.issued = addDays(today, -r.int(3, 28)); };
 
@@ -148,8 +145,6 @@
       case "ticketDate": if (A.ticket) A.ticket.date = addDays(today, r.pick([-2, -1, 1, 3])); break;
       case "seal": if (A.ticket) A.ticket.seal = V.SEAL_OLD; break;
       case "heart": A.heart = "irregular"; A.med = null; break;
-      case "hair": if (A.role === "地上職員") break; recent(A, r, today); A.hairSample = "cut"; break;
-      case "hairMissing": if (A.role === "地上職員") break; recent(A, r, today); break;
       // 顔写真の偽装:登録簿の顔(または瞳の色)が、窓口の本人と違う(他人のIDを使っている)
       case "faceReg": A.faceVariant = r.chance(0.5) ? "eye" : "face"; A.regLook = A.faceVariant === "eye" ? otherEyes(A, r) : otherLook(A, r); if (A.target) impostorBlood(A, r); break;
       // カードの偽造:カードの印字(顔写真、ときに氏名)が、チップの指す登録簿と違う
@@ -162,8 +157,17 @@
         if (A.target) impostorBlood(A, r);
         break;
       }
-      case "mass": if (A.ticket) A.massActual = Math.round((A.ticket.mass + r.int(7, 18) / 10) * 10) / 10; break; // 体重は違うが、X線には何も写らない
-      case "xray": if (!A.ticket) break; A.xray = "pouch"; A.massActual = Math.round((A.ticket.mass + r.int(7, 15) / 10) * 10) / 10; break;
+      // 体重は違うが偽装ではない:何も写らないか、手術の金属板か、医療記録のある心臓の機器
+      case "mass": {
+        if (!A.ticket) break;
+        A.massActual = Math.round((A.ticket.mass + r.int(7, 18) / 10) * 10) / 10;
+        const k = r.pick([null, "plate", "deviceOK"]);
+        if (k === "plate") A.xray = "plate";
+        if (k === "deviceOK") { A.xray = "device"; A.med = { name: A.regLatin, cond: "植込み型除細動器(心室細動の治療)" }; }
+        break;
+      }
+      // X線に写る偽装:前腕の血液パッド / すねの延長ボルト / 記録のない心臓の機器
+      case "xray": if (!A.ticket) break; A.xray = r.pick(["pad", "bolts", "device"]); A.massActual = Math.round((A.ticket.mass + r.int(7, 15) / 10) * 10) / 10; break;
     }
     A.planted = flaw;
   }
@@ -204,9 +208,8 @@
     }
     if (checks.includes("seal") && A.ticket && A.ticket.seal !== V.SEAL_CURRENT) add("seal", [["ticket.seal", "rule.seal"]], "deny");
     if (checks.includes("heart") && A.heart === "irregular" && !(A.med && A.med.name === A.regLatin)) add("heart", [["heart", "rule.heart"]], "deny");
-    if (checks.includes("hair") && A.target && !A.hairCard) add("hairMissing", [["rule.hair", A.role === "乗員" ? "reg.class" : "reg.issued"]], "deny");
-    if (checks.includes("hair") && A.hairCard && A.hairSample === "cut") add("hair", [["hair", "rule.hair"]], "detain");
-    if (checks.includes("xray") && A.xray) add("xray", [["xray", "rule.xray"]], "detain");
+    if (checks.includes("xray") && (A.xray === "pad" || A.xray === "bolts")) add("xray", [["xray", "rule.xray"]], "detain");
+    if (checks.includes("xray") && A.xray === "device" && !(A.med && A.med.name === A.regLatin && A.med.cond.includes("除細動器"))) add("implant", [["xray", "rule.xray"]], "deny");
     return out;
   }
 
@@ -235,7 +238,7 @@
     const p = ["expired", "status", "permit", "genome", "height", "genome", "height"];
     p.push("faceReg");
     if (day >= 2) p.push("cardForged", "faceReg", "ticketName", "ticketDate", "seal", "seal", "heart", "heart");
-    if (day >= 3) p.push("hair", "hair", "hairMissing", "mass", "xray", "xray");
+    if (day >= 3) p.push("mass", "mass", "xray", "xray", "xray");
     return p;
   }
 
