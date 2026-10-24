@@ -11,22 +11,23 @@
   // ---- 規則 ----
   // key は照合で使う欄の名前。day はその規則が始まる日。
   V.RULES = [
-    { key: "rule.expiry", day: 1, text: "ゲノムIDは有効期限内であること。" },
-    { key: "rule.status", day: 1, text: "判定が INVALID の乗客・乗員は搭乗できない。" },
-    { key: "rule.staff", day: 1, text: "INVALID の地上職員は、本人の作業許可証があれば【限定】で通す。" },
-    { key: "rule.height", day: 1, text: "実測身長が、登録簿の予測身長の範囲内であること。" },
-    { key: "rule.face", day: 1, text: "IDカードを端末に差し、登録簿の顔写真と瞳の色が本人と一致すること。" },
-    { key: "rule.sample", day: 1, text: "採血の対象:乗員と、IDの発行から30日以内の者。対象者は必ず採血する。" },
-    { key: "rule.genome", day: 1, text: "採血した検体の16塩基が、登録簿のゲノム署名と一致すること。" },
-    { key: "rule.detain", day: 1, text: "偽装を指摘されて暴れた者は、【警備を呼ぶ】で拘束する。" },
-    { key: "rule.ticket", day: 2, text: "乗客と乗員は、本人名義・本日付の搭乗券を持つこと。" },
-    { key: "rule.card", day: 2, text: "IDカードの印字(顔写真・氏名)が、登録簿と一致すること。違えば偽造。" },
-    { key: "rule.seal", day: 2, text: "搭乗券の印章は現行の第12版(E-12)に限る。" },
-    { key: "rule.heart", day: 2, text: "心拍に乱れがあれば不適格。医療記録で既往が示されていれば可。" },
-    { key: "rule.hair", day: 3, text: "採血の対象者は、毛髪台紙も提出すること。毛根のない毛髪は偽装。" },
-    { key: "rule.mass", day: 3, text: "体重が搭乗券の申告質量と0.5kgを超えて違えば、X線を撮らせる。" },
-    { key: "rule.xray", day: 3, text: "X線写真に不審物が写っていれば偽装。" }
+    { key: "rule.expiry", day: 1, cat: "書類", text: "ゲノムIDは有効期限内であること。" },
+    { key: "rule.status", day: 1, cat: "書類", text: "判定が INVALID の乗客・乗員は搭乗できない。" },
+    { key: "rule.staff", day: 1, cat: "書類", text: "INVALID の地上職員は、本人の作業許可証があれば【限定】で通す。" },
+    { key: "rule.height", day: 1, cat: "身体", text: "実測身長が、登録簿の予測身長の範囲内であること。" },
+    { key: "rule.face", day: 1, cat: "身体", text: "IDカードを端末に置き、登録簿の顔写真と瞳の色が本人と一致すること。" },
+    { key: "rule.sample", day: 1, cat: "遺伝子", text: "採血の対象:乗員と、IDの発行から30日以内の者。対象者は必ず採血する。" },
+    { key: "rule.genome", day: 1, cat: "遺伝子", text: "採血した検体の16塩基が、登録簿のゲノム署名と一致すること。" },
+    { key: "rule.detain", day: 1, cat: "手順", text: "偽装を指摘されて暴れた者は、【警備を呼ぶ】で拘束する。" },
+    { key: "rule.ticket", day: 2, cat: "書類", text: "乗客と乗員は、本人名義・本日付の搭乗券を持つこと。" },
+    { key: "rule.card", day: 2, cat: "書類", text: "IDカードの印字(顔写真・氏名)が、登録簿と一致すること。違えば偽造。" },
+    { key: "rule.seal", day: 2, cat: "書類", text: "搭乗券の印章は現行の第12版(E-12)に限る。" },
+    { key: "rule.heart", day: 2, cat: "身体", text: "心拍に乱れがあれば不適格。医療記録で既往が示されていれば可。" },
+    { key: "rule.hair", day: 3, cat: "遺伝子", text: "採血の対象者は、毛髪台紙も提出すること。毛根のない毛髪は偽装。" },
+    { key: "rule.mass", day: 3, cat: "身体", text: "体重が搭乗券の申告質量と0.5kgを超えて違えば、X線を撮らせる。" },
+    { key: "rule.xray", day: 3, cat: "身体", text: "X線写真に不審物が写っていれば偽装。" }
   ];
+  V.RULE_CATS = ["書類", "身体", "遺伝子", "手順"];
   V.SAMPLE_DAYS = 30;
 
   // その日に有効な検査の種類

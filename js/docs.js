@@ -159,19 +159,31 @@
         g.text("規則冊子", w / 2, 7, S[7], { align: "center" });
         return;
       }
-      // 見開き:左右2ページ。ページ番号と、左右の中央にめくる矢印
-      const M = 9, PW = (d.w - M * 2 - 2) / 2, pages = rulePages(day, PW);
+      // 見開き:左右2ページ。上に分類の見出し(押すとその分類のページへ飛ぶ)、ページ番号、左右の中央にめくる矢印
+      const M = 9, T = 11, PW = (d.w - M * 2 - 2) / 2, pages = rulePages(day, PW);
       d.spreads = Math.ceil(pages.length / 2);
       d.page = V.clamp(d.page, 0, d.spreads - 1);
       g.rect(0, 0, d.w, d.h, S[1]);
+      // 見出し
+      let tx = M + 2;
+      V.RULE_CATS.forEach(cat => {
+        const start = pages.catStart[cat];
+        if (start === undefined) return;
+        const tw = V.Surface.measure(cat) + 8, here = Math.floor(start / 2) === d.page;
+        g.rect(tx, 1, tw, T - 1, here ? S[7] : S[4]);
+        g.text(cat, tx + tw / 2, 2, here ? S[0] : S[8], { align: "center" });
+        d.field("tab.go." + start, tx, 0, tw, T, "");
+        tx += tw + 3;
+      });
       [0, 1].forEach(side => {
         const px = M + side * (PW + 2), idx = d.page * 2 + side;
-        g.rect(px, 3, PW, d.h - 6, S[7]);
-        g.rect(side ? px : px + PW - 2, 3, 2, d.h - 6, S[6]);
+        g.rect(px, T + 1, PW, d.h - T - 4, S[7]);
+        g.rect(side ? px : px + PW - 2, T + 1, 2, d.h - T - 4, S[6]);
         if (!pages[idx]) return;
-        let y = 6;
+        let y = T + 4;
         pages[idx].forEach(e => {
           const r = e.rule, fresh = r.day === day && day > 1;
+          if (e.head) { g.text("― " + r.cat + " ―", px + PW / 2, y, S[4], { align: "center" }); y += 10; }
           g.rect(px + 3, y + 3, 2, 2, fresh ? S[0] : S[4]);
           e.lines.forEach((ln, i) => g.text(ln, px + 7, y + i * 9, fresh ? S[0] : S[2]));
           d.field(r.key, px + 1, y - 1, PW - 2, e.lines.length * 9 + 1 + (e.seal ? 22 : 0), r.text);
@@ -179,26 +191,33 @@
           if (e.seal) { V.art.seal(g, px + 16, y + 10, V.SEAL_CURRENT); g.text("現行", px + 28, y + 6, S[3]); y += 22; }
           y += 3;
         });
-        g.text(String(idx + 1), px + PW / 2, d.h - 13, S[4], { align: "center" });
+        g.text(String(idx + 1), px + PW / 2, d.h - 12, S[4], { align: "center" });
       });
-      g.rect(d.w / 2 - 1, 3, 2, d.h - 6, S[1]);
-      const my = Math.round(d.h / 2 - 8);
+      g.rect(d.w / 2 - 1, T + 1, 2, d.h - T - 4, S[1]);
+      const my = Math.round(T + (d.h - T) / 2 - 8);
       if (d.page > 0) { g.rect(1, my, 7, 16, S[5]); g.text("◀", 4.5, my + 4, S[0], { align: "center" }); d.field("tab.prev", 0, my - 6, M, 28, ""); }
       if (d.page < d.spreads - 1) { g.rect(d.w - 8, my, 7, 16, S[5]); g.text("▶", d.w - 4.5, my + 4, S[0], { align: "center" }); d.field("tab.next", d.w - M, my - 6, M, 28, ""); }
     }
   };
 
   // 規則をページに詰める(新しい規則が先頭のページに来る)
+  // 分類ごとに新しいページから始める(分類の中では、今日の新しい規則が先)
   function rulePages(day, w) {
-    const list = V.RULES.filter(r => r.day <= day).sort((a, b) => (b.day === day) - (a.day === day));
-    const pages = [[]], H = 84;
-    let used = 0;
-    list.forEach(r => {
-      const lines = V.Surface.wrap(r.text, w - 10), seal = r.key === "rule.seal";
-      const h = lines.length * 9 + 3 + (seal ? 22 : 0);
-      if (used + h > H && pages[pages.length - 1].length) { pages.push([]); used = 0; }
-      pages[pages.length - 1].push({ rule: r, lines, seal });
-      used += h;
+    const pages = [], H = 84;
+    pages.catStart = {};
+    V.RULE_CATS.forEach(cat => {
+      const list = V.RULES.filter(r => r.day <= day && r.cat === cat).sort((a, b) => (b.day === day) - (a.day === day));
+      if (!list.length) return;
+      if (!pages.length || pages[pages.length - 1].length) pages.push([]);
+      pages.catStart[cat] = pages.length - 1;
+      let used = 10;
+      list.forEach((r, i) => {
+        const lines = V.Surface.wrap(r.text, w - 10), seal = r.key === "rule.seal";
+        const h = lines.length * 9 + 3 + (seal ? 22 : 0);
+        if (used + h > H && pages[pages.length - 1].length) { pages.push([]); used = 0; }
+        pages[pages.length - 1].push({ rule: r, lines, seal, head: i === 0 });
+        used += h;
+      });
     });
     return pages;
   }
@@ -219,7 +238,7 @@
     return { w, h };
   }
 
-  const SIZES = { id: [76, 42], reg: [118, 68], ticket: [86, 50], permit: [82, 40], med: [74, 50], envelope: [46, 26], hairCard: [44, 30], xfilm: [54, 70], rules: [206, 104], citation: [120, 80] };
+  const SIZES = { id: [76, 42], reg: [118, 68], ticket: [86, 50], permit: [82, 40], med: [74, 50], envelope: [46, 26], hairCard: [44, 30], xfilm: [54, 70], rules: [206, 114], citation: [120, 80] };
   function make(kind, owner) { const [w, h] = SIZES[kind]; const d = new Doc(kind, owner, w, h); d.lcd = LCD_KINDS.includes(kind); return d; }
 
   V.docs = { Doc, make, mini, MINI, rulePages };

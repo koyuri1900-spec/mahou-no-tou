@@ -9,23 +9,24 @@
     hall: { x: 0, y: 0, w: 480, h: 84 },
     board: { x: 96, y: 13, w: 72, h: 20 },
     kiosk: { x: 96, y: 36, w: 72, h: 44 },
-    booth: { x: 0, y: 84, w: 168, h: 186 },
-    win: { x: 4, y: 86, w: 160, h: 128 },
-    tray: { x: 4, y: 216, w: 160, h: 28 },
-    clock: { x: 4, y: 247, w: 82, h: 21 },
-    bookSlot: { x: 90, y: 247, w: 34, h: 21 },
-    citeBox: { x: 128, y: 247, w: 36, h: 21 },
-    desk: { x: 168, y: 84, w: 312, h: 186 },
+    // 窓口(左)は狭く、机(右)を広く
+    booth: { x: 0, y: 84, w: 126, h: 186 },
+    win: { x: 4, y: 86, w: 118, h: 128 },
+    tray: { x: 4, y: 216, w: 118, h: 28 },
+    clock: { x: 4, y: 247, w: 80, h: 21 },
+    bookSlot: { x: 88, y: 247, w: 34, h: 21 },
+    desk: { x: 126, y: 84, w: 354, h: 186 },
     // 机の上端に据え付けた計器の帯(身体・遺伝子・記録)
-    gauge: { x: 170, y: 86, w: 308, h: 42 },
-    gBody: { x: 170, y: 86, w: 96, h: 42 },
-    gGene: { x: 268, y: 86, w: 130, h: 42 },
-    gRec: { x: 400, y: 86, w: 78, h: 42 },
-    alarm: { x: 316, y: 132, w: 74, h: 22 },
-    loupeCase: { x: 432, y: 132, w: 44, h: 24 },
-    terminal: { x: 392, y: 162, w: 86, h: 88 },
-    inspect: { x: 418, y: 252, w: 58, h: 16 },
-    endBtn: { x: 172, y: 252, w: 58, h: 16 }
+    gauge: { x: 128, y: 86, w: 350, h: 34 },
+    gBody: { x: 128, y: 86, w: 104, h: 34 },
+    gGene: { x: 234, y: 86, w: 140, h: 34 },
+    gRec: { x: 376, y: 86, w: 102, h: 34 },
+    alarm: { x: 282, y: 124, w: 80, h: 18 },
+    loupeCase: { x: 434, y: 124, w: 44, h: 22 },
+    // 判定端末:カードを寝かせて置く読み取り台と、右の細いキーの列
+    terminal: { x: 366, y: 196, w: 112, h: 54 },
+    citeBox: { x: 130, y: 250, w: 44, h: 18 },
+    inspect: { x: 418, y: 252, w: 58, h: 16 }
   };
 
   // 身長の壁:205cm が窓の上端近く、140cm が窓の中ほど。頭頂の高さで身長を読む。
@@ -33,7 +34,7 @@
   const CM_PX = 1.1;
   V.cmToY = cm => V.L.win.y + 10 + (205 - cm) * CM_PX;
   V.CM_PX = CM_PX;
-  V.BUST_K = 2.2;
+  V.BUST_K = 1.75;
 
   // ---- 背景(1日ごとに作り直す。ロケットの組み上がりが変わる)----
   function background(day) {
@@ -84,7 +85,7 @@
     g.rect(bd.x + 34, bd.y + bd.h, 4, k.y - bd.y - bd.h, S[1]);
 
     // 窓口(左下)
-    g.rect(0, 85, 168, 185, S[1]);
+    g.rect(0, 85, L.booth.w, 185, S[1]);
     const w = L.win;
     g.rect(w.x - 2, w.y - 2, w.w + 4, w.h + 4, S[0]);
     g.rect(w.x, w.y, w.w, w.h, S[3]);
@@ -104,7 +105,7 @@
     g.rect(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[0]);
     g.dither(L.tray.x, L.tray.y, L.tray.w, L.tray.h, S[2], 0.35);
     g.rect(L.tray.x, L.tray.y, L.tray.w, 2, S[3]);
-    [L.clock, L.bookSlot, L.citeBox].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
+    [L.clock, L.bookSlot].forEach(r => { g.rect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, S[0]); g.rect(r.x, r.y, r.w, r.h, S[2]); });
 
     // 机(右下)
     // 机(右下):机の面そのものが液晶。淡い格子が光っている
